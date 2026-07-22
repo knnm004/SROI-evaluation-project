@@ -1,0 +1,210 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { 
+    font-family: 'Sarabun', sans-serif; 
+  }
+}
+
+@layer components {
+  .form-panel {
+    @apply bg-gray-50 p-4 rounded-xl border border-gray-200;
+  }
+
+  .form-label {
+    @apply block text-xs font-semibold text-gray-700 mb-1;
+  }
+
+  .form-control {
+    @apply w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-chula outline-none bg-white;
+  }
+
+  .map-search-row {
+    @apply flex flex-col sm:flex-row gap-2;
+  }
+
+  .map-panel {
+    @apply border border-gray-200 rounded-xl bg-gray-50 p-4 space-y-3;
+  }
+
+  .map-panel-header {
+    @apply flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2;
+  }
+
+  .map-mode-button {
+    @apply rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap;
+  }
+
+  .map-mode-button-active {
+    @apply bg-chula text-white border-chula;
+  }
+
+  .map-mode-button-idle {
+    @apply bg-white text-gray-600 border-gray-200 hover:border-chula-light hover:text-chula-darker;
+  }
+
+  .map-results {
+    @apply grid grid-cols-1 md:grid-cols-2 gap-2;
+  }
+
+  .map-result {
+    @apply text-left bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-chula-light hover:bg-chula hover:bg-opacity-5 transition-colors;
+  }
+
+  .map-result span {
+    @apply block leading-snug;
+  }
+
+  .map-result-actions {
+    @apply mt-2 flex flex-wrap gap-2;
+  }
+
+  .map-result-actions button {
+    @apply rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-700 hover:border-chula-light hover:text-chula-darker;
+  }
+
+  .area-map {
+    @apply h-72 sm:h-80 rounded-lg border border-gray-200 overflow-hidden bg-white;
+  }
+
+  .area-map-draw-mode,
+  .area-map-draw-mode .leaflet-container,
+  .area-map-draw-mode .leaflet-grab,
+  .area-map-draw-mode .leaflet-interactive {
+    cursor: crosshair !important;
+  }
+
+  .selected-location {
+    @apply rounded-lg bg-white border border-gray-200 px-3 py-2 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2;
+  }
+
+  .report-cell {
+    @apply bg-gray-50 p-3 rounded border text-sm;
+  }
+
+  .report-label {
+    @apply block text-xs text-gray-500 mb-1 font-semibold;
+  }
+
+  .framework-tab {
+    @apply px-4 py-2 rounded-lg text-sm font-semibold border transition-colors whitespace-nowrap;
+  }
+
+  .framework-tab-active {
+    @apply bg-chula text-white border-chula;
+  }
+
+  .framework-tab-idle {
+    @apply bg-white text-gray-600 border-gray-200 hover:border-chula-light hover:text-chula-darker;
+  }
+
+  .sroi-metric-bar {
+    @apply bg-blue-50 border border-blue-100 rounded-xl p-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4;
+  }
+
+  .sroi-metric-card {
+    @apply bg-white border border-blue-100 rounded-lg px-3 py-2 min-h-[68px] flex flex-col justify-center;
+  }
+
+  .sroi-metric-card span {
+    @apply text-xs text-gray-500;
+  }
+
+  .sroi-metric-card strong {
+    @apply text-base font-bold text-gray-900 leading-tight break-words;
+  }
+
+  .sroi-metric-card-primary {
+    @apply border-chula-light bg-chula bg-opacity-5;
+  }
+
+  .sroi-metric-card-primary strong {
+    @apply text-chula text-xl;
+  }
+
+  .sroi-section {
+    @apply rounded-xl border border-gray-200 bg-white p-4;
+  }
+
+  .sroi-validation-panel {
+    @apply rounded-xl border p-4;
+  }
+
+  .sroi-validation-panel-error {
+    @apply bg-rose-50 border-rose-100 text-rose-800;
+  }
+
+  .sroi-validation-panel-ok {
+    @apply bg-green-50 border-green-100 text-green-800;
+  }
+
+  .validation-item {
+    @apply flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2;
+  }
+
+  .validation-row-pill {
+    @apply inline-flex w-fit items-center rounded-full bg-white px-2 py-0.5 text-xs font-bold text-gray-700 border border-current border-opacity-10;
+  }
+
+  .validation-message {
+    @apply text-xs rounded-lg px-3 py-2;
+  }
+
+  .validation-error {
+    @apply bg-red-50 text-red-700 border border-red-100;
+  }
+
+  .validation-ok {
+    @apply bg-green-50 text-green-700 border border-green-100;
+  }
+
+  .validation-neutral {
+    @apply bg-gray-50 text-gray-500 border border-gray-100;
+  }
+
+  .pv-year-card {
+    @apply rounded-lg bg-white border border-gray-100 px-3 py-2 min-h-[64px] flex flex-col justify-center;
+  }
+
+  .pv-year-card span {
+    @apply text-xs font-semibold text-gray-500;
+  }
+
+  .pv-year-card strong {
+    @apply text-sm font-mono font-bold text-gray-900 break-words;
+  }
+}
+
+@layer utilities {
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #f1f1f1; }
+  ::-webkit-scrollbar-thumb { background: theme('colors.chula.light'); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: theme('colors.chula.dark'); }
+
+  .fade-in { animation: fadeIn 0.4s ease-in-out; }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  /* Step Indicators */
+  .step-active { 
+    @apply border-chula bg-chula text-white; 
+  }
+  .step-inactive { 
+    @apply border-gray-200 bg-gray-100 text-gray-400; 
+  }
+  
+  /* Checkbox Styling */
+  .sdg-checkbox:checked + div {
+    border-color: theme('colors.chula.DEFAULT');
+    background-color: theme('colors.chula.light');
+  }
+
+  /* PDF Export specific styles */
+  .pdf-page-break { page-break-after: always; }
+}

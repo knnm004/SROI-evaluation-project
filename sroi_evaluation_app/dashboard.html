@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - SROI Evaluation Platform</title>
+    
+    <!-- Match fonts and icons from index.html -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col font-sans">
+
+    <!-- EXACT HEADER FROM INDEX.HTML -->
+    <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo section -->
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.reload()">
+                    <div class="w-10 h-10 bg-chula rounded-full flex items-center justify-center text-white text-xl shadow-inner">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg leading-tight text-gray-900">SROI Evaluation Platform</h1>
+                        <p class="text-xs text-chula-dark font-medium">Chulalongkorn University</p>
+                    </div>
+                </div>
+                <!-- User Profile section -->
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <span class="text-sm font-medium" id="user-email-display">Loading...</span>
+                    <button id="logout-btn" class="ml-4 text-sm text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Dashboard Header & New Assessment Button -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 border-b border-gray-200 pb-6">
+            <div>
+                <h2 class="text-3xl font-bold text-gray-900 mb-1">My Assessments</h2>
+                <p class="text-gray-500" id="welcome-message">Welcome back</p>
+            </div>
+            
+            <button onclick="window.location.href='/index.html?new=true'" class="bg-chula hover:bg-chula-dark text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:-translate-y-1 flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i> สร้างแบบประเมินใหม่
+            </button>
+        </div>
+
+        <!-- Projects Grid Container -->
+        <div id="projects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Loading state placeholder -->
+            <div class="col-span-full text-center py-12 text-gray-400" id="loading-state">
+                <i class="fa-solid fa-spinner fa-spin text-3xl mb-3"></i>
+                <p>กำลังโหลดข้อมูลโครงการ...</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- EXACT FOOTER FROM INDEX.HTML -->
+    <footer class="bg-white border-t border-gray-200 mt-auto py-4 text-center text-xs text-gray-500">
+        &copy; 2026 Chulalongkorn University. SROI Evaluation Prototype. All rights reserved.
+    </footer>
+
+    <!-- Scripts -->
+    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/dashboard.js"></script>
+</body>
+</html>

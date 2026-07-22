@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบประเมิน SROI - จุฬาลงกรณ์มหาวิทยาลัย</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+
+    <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="appState.goHome()">
+                    <div class="w-10 h-10 bg-chula rounded-full flex items-center justify-center text-white text-xl shadow-inner">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg leading-tight text-gray-900">SROI Evaluation Platform</h1>
+                        <p class="text-xs text-chula-dark font-medium">Chulalongkorn University</p>
+                    </div>
+                </div>
+                <div id="nav-user" class="hidden flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <span class="text-sm font-medium" id="user-email-display">researcher@chula.ac.th</span>
+                    <button onclick="appState.logout()" class="ml-4 text-sm text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow flex flex-col items-center justify-center p-4 sm:p-6 w-full max-w-7xl mx-auto">
+        
+        <div id="view-landing" class="text-center max-w-3xl fade-in">
+            <h2 class="text-3xl md:text-5xl font-bold text-gray-900 mb-6">ระบบประเมินผลตอบแทนทางสังคม<br><span class="text-chula">(SROI Evaluation Framework)</span></h2>
+            <p class="text-lg text-gray-600 mb-8 leading-relaxed">
+                เครื่องมือสำหรับนักวิจัยและบุคลากรเพื่อประเมินความคุ้มค่าและผลกระทบเชิงบวกทางสังคมของงานวิจัย 
+                และโครงการวิชาการต่างๆ 
+                <br><br>เข้าสู่ระบบเพื่อเริ่มต้นกรอกข้อมูล ประเมินผล และออกรายงานฉบับสมบูรณ์
+            </p>
+            <button onclick="appState.showView('view-login')" class="bg-chula hover:bg-chula-dark text-white font-medium py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-lg">
+                <i class="fa-brands fa-microsoft mr-2"></i> เข้าสู่ระบบด้วยบัญชีองค์กร
+            </button>
+        </div>
+
+        <div id="view-login" class="hidden w-full max-w-md fade-in bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div class="bg-chula p-6 text-center text-white">
+                <i class="fa-solid fa-circle-user text-5xl mb-3"></i>
+                <h2 class="text-2xl font-bold">เข้าสู่ระบบ</h2>
+                <p class="text-sm opacity-90">สำหรับบุคลากรจุฬาลงกรณ์มหาวิทยาลัย</p>
+            </div>
+            <div class="p-8">
+                <form id="login-form" onsubmit="event.preventDefault(); appState.login();">
+                    <div class="mb-5">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">อีเมลองค์กร (CUNET)</label>
+                        <input type="email" id="login-email" required placeholder="example@chula.ac.th" 
+                               class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-chula focus:border-chula outline-none transition-colors">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่าน</label>
+                        <input type="password" id="login-password" required placeholder="••••••••" 
+                               class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-chula focus:border-chula outline-none transition-colors">
+                    </div>
+                    <button type="submit" class="w-full bg-gray-900 hover:bg-black text-white font-medium py-3 rounded-lg shadow transition-colors">
+                        เข้าสู่ระบบ
+                    </button>
+                </form>
+                <div class="mt-6 text-center">
+                    <button onclick="appState.showView('view-landing')" class="text-sm text-gray-500 hover:text-chula-dark"><i class="fa-solid fa-arrow-left mr-1"></i> กลับหน้าหลัก</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-app" class="hidden w-full max-w-6xl fade-in flex-grow flex flex-col">
+            
+            <div class="bg-white rounded-xl shadow-sm p-4 mb-6" id="stepper-container">
+                <div class="flex items-center justify-between relative">
+                    <div class="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-gray-200 z-0"></div>
+                </div>
+            </div>
+
+            <!-- COMMENTED OUT: Redundant project title and edit bar 
+            <div class="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <p class="text-xs font-semibold uppercase text-gray-500">Current Project</p>
+                    <p id="project-title-chip" class="font-bold text-gray-900">ยังไม่ได้ตั้งชื่อโครงการ</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span id="draft-status" class="text-xs text-gray-500">draft ready</span>
+                    <button type="button" onclick="appState.goToStep(1)" class="px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:border-chula-light hover:text-chula-darker transition-colors">
+                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit project info
+                    </button>
+                </div>
+            </div>
+            -->
+
+            <div class="bg-white rounded-2xl shadow-md p-6 sm:p-8 flex-grow min-w-0">
+                
+                <div id="step-1" class="step-content hidden fade-in">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2 border-b-2 border-chula pb-2 inline-block">1. ข้อมูลพื้นฐานการวิจัย</h3>
+                    <p class="text-gray-500 mb-6 text-sm">ระบุข้อมูลทั่วไปเกี่ยวกับโครงการวิจัยของคุณ</p>
+                    
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">ชื่อโครงการ (Project Name)</label>
+                            <input type="text" id="m_projectName" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none" placeholder="ระบุชื่อโครงการวิจัย">
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">ผู้รับผิดชอบโครงการ (Responsible)</label>
+                                <input type="text" id="m_responsible" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none" placeholder="ชื่อ-นามสกุล / คณะ">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">พื้นที่ดำเนินการ (Working Area)</label>
+                                <div class="map-search-row">
+                                    <div class="relative flex-1">
+                                        <i class="fa-solid fa-location-dot absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                                        <input type="text" id="m_area" class="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none" placeholder="ค้นหาชื่อพื้นที่ เช่น สามย่าน, จุฬาลงกรณ์มหาวิทยาลัย" onkeydown="if(event.key === 'Enter'){event.preventDefault(); appState.searchAreaLocation();}">
+                                    </div>
+                                    <button type="button" onclick="appState.searchAreaLocation()" class="bg-chula hover:bg-chula-dark text-white px-4 py-2 rounded-lg shadow-sm text-sm font-semibold transition-colors">
+                                        <i class="fa-solid fa-magnifying-glass mr-1"></i>ค้นหาแผนที่
+                                    </button>
+                                </div>
+                                <input type="hidden" id="m_lat">
+                                <input type="hidden" id="m_lng">
+                                <input type="hidden" id="m_place_name">
+                                <input type="hidden" id="m_osm_id">
+                                <input type="hidden" id="m_location_type" value="pin">
+                                <input type="hidden" id="m_bounds_south">
+                                <input type="hidden" id="m_bounds_north">
+                                <input type="hidden" id="m_bounds_west">
+                                <input type="hidden" id="m_bounds_east">
+                            </div>
+                        </div>
+                        <div class="map-panel">
+                            <div class="map-panel-header">
+                                <div>
+                                    <h4 class="font-bold text-gray-900"><i class="fa-solid fa-map-location-dot text-chula mr-2"></i>ตำแหน่งโครงการบน OpenStreetMap</h4>
+                                    <p id="area-map-status" class="text-xs text-gray-500 mt-1">ค้นหาพื้นที่ หรือเลือกโหมดเพื่อปักหมุด/ลากคลุมพื้นที่</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" id="map-mode-pin" onclick="appState.setMapSelectionMode('pin')" class="map-mode-button map-mode-button-active">
+                                        <i class="fa-solid fa-location-dot mr-1"></i>ปักหมุด
+                                    </button>
+                                    <button type="button" id="map-mode-area" onclick="appState.setMapSelectionMode('area')" class="map-mode-button map-mode-button-idle">
+                                        <i class="fa-solid fa-vector-square mr-1"></i>กำหนดพื้นที่
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="form-label">ชื่อพื้นที่/ตำแหน่งที่จะแสดงในรายงาน</label>
+                                <input type="text" id="m_location_label" class="form-control" placeholder="เช่น ชุมชนสามย่าน, พื้นที่นำร่องรอบจุฬาฯ">
+                            </div>
+                            <div id="area-search-results" class="map-results hidden"></div>
+                            <div id="area-map" class="area-map"></div>
+                            <div class="selected-location">
+                                <div id="selected-area-location">ยังไม่ได้เลือกตำแหน่ง</div>
+                                <button type="button" onclick="appState.clearAreaLocation()" class="text-xs font-semibold text-gray-500 hover:text-red-600">
+                                    ล้างตำแหน่ง
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">วัตถุประสงค์ (Objective)</label>
+                            <textarea id="m_objective" rows="3" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none resize-none" placeholder="ระบุวัตถุประสงค์หลักของโครงการ"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step-2" class="step-content hidden fade-in">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2 border-b-2 border-chula pb-2 inline-block">2. I1 ระบุเป้าหมาย SDGs</h3>
+                    <p class="text-gray-500 mb-6 text-sm">เลือกเป้าหมาย SDGs ที่สอดคล้องกับงานวิจัย เลือกได้มากกว่า 1 ข้อ และใช้เชื่อมกับ Output/Impact ในขั้นตอนถัดไป</p>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 mb-6">
+                        <div>
+                            <label class="form-label">ค้นหา SDGs</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                                <input type="search" id="sdg-search" class="form-control pl-9" placeholder="ค้นหาด้วยหมายเลข ชื่อเป้าหมาย หรือคำสำคัญ">
+                            </div>
+                        </div>
+                        <div class="bg-chula bg-opacity-5 border border-chula-light rounded-xl p-4">
+                            <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-thumbtack text-chula mr-2"></i>Selected SDGs</h4>
+                            <div id="selected-sdgs" class="space-y-3"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="sdg-container">
+                    </div>
+                </div>
+
+                <div id="step-3" class="step-content hidden fade-in">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2 border-b-2 border-chula pb-2 inline-block">3. I2 Impact Pathway และ I3 Indicator</h3>
+                    <p class="text-gray-500 mb-6 text-sm">กรอกข้อมูลตาม 6 หัวข้อหลักของ Impact Pathway และสรุป Theory of Change ในรูปแบบ "ถ้า...แล้ว..."</p>
+                    
+                    <div class="overflow-x-auto mb-6">
+                        <div class="flex gap-2 min-w-max">
+                            <button type="button" data-pathway-tab="inputs" onclick="appState.showPathwayPanel('inputs')" class="framework-tab framework-tab-active">Inputs</button>
+                            <button type="button" data-pathway-tab="stakeholders" onclick="appState.showPathwayPanel('stakeholders')" class="framework-tab framework-tab-idle">Stakeholders</button>
+                            <button type="button" data-pathway-tab="activities" onclick="appState.showPathwayPanel('activities')" class="framework-tab framework-tab-idle">Activities</button>
+                            <button type="button" data-pathway-tab="outputs" onclick="appState.showPathwayPanel('outputs')" class="framework-tab framework-tab-idle">Outputs</button>
+                            <button type="button" data-pathway-tab="outcomes" onclick="appState.showPathwayPanel('outcomes')" class="framework-tab framework-tab-idle">Outcomes</button>
+                            <button type="button" data-pathway-tab="impacts" onclick="appState.showPathwayPanel('impacts')" class="framework-tab framework-tab-idle">Impacts</button>
+                            <button type="button" data-pathway-tab="indicators" onclick="appState.showPathwayPanel('indicators')" class="framework-tab framework-tab-idle">Indicators</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="form-panel" data-pathway-panel="inputs">
+                            <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>ปัจจัยนำเข้า (Inputs)</h4>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="form-label">แหล่งทุนและมูลค่าทรัพยากร</label>
+                                    <textarea id="i_inputs" rows="4" class="form-control resize-none" placeholder="เช่น แหล่งเงินทุนภายใน SiHub, แหล่งทุนภายนอก, เวลา อุปกรณ์ หรือทรัพยากรที่ใช้"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">องค์ความรู้และทรัพยากรบุคคล</label>
+                                    <textarea id="i_knowledge" rows="3" class="form-control resize-none" placeholder="เช่น ความเชี่ยวชาญของทีมวิจัย เครือข่ายชุมชน ฐานข้อมูล เครื่องมือวิจัย"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-panel hidden" data-pathway-panel="stakeholders">
+                            <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-users-line mr-2"></i>ผู้มีส่วนได้ส่วนเสีย (Stakeholders)</h4>
+                            <textarea id="i_stakeholders" rows="8" class="form-control resize-none" placeholder="ระบุกลุ่มที่ได้รับผลกระทบ/เกี่ยวข้อง เช่น ชุมชน กลุ่มเป้าหมาย หน่วยงานรัฐ ผู้ร่วมทุน พร้อมจำนวนหรือระดับความเกี่ยวข้องถ้ามี"></textarea>
+                        </div>
+
+                        <div class="form-panel hidden" data-pathway-panel="activities">
+                            <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-person-digging mr-2"></i>กิจกรรม (Activities)</h4>
+                            <textarea id="i_activities" rows="7" class="form-control resize-none" placeholder="ระบุชื่อกิจกรรม ช่วงเวลาดำเนินการ งบประมาณที่ใช้ กลุ่มผู้เข้าร่วม และวิธีดำเนินงานหลัก"></textarea>
+                        </div>
+
+                        <div class="form-panel hidden" data-pathway-panel="outputs">
+                            <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-box-open mr-2"></i>ผลผลิต (Outputs)</h4>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="form-label">ผลผลิตที่เกิดขึ้นโดยตรง</label>
+                                    <textarea id="i_output" rows="4" class="form-control resize-none" placeholder="เช่น จำนวนหลักสูตร จำนวนผู้เข้าอบรม คู่มือ ฐานข้อมูล ต้นแบบ หรือบริการที่ส่งมอบ"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">SDGs ที่เชื่อมกับผลผลิต</label>
+                                    <textarea id="i_output_sdg" rows="2" class="form-control resize-none" placeholder="เช่น SDG 4 เพราะผลผลิตช่วยเพิ่มโอกาสเรียนรู้ของกลุ่มเป้าหมาย"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-panel hidden" data-pathway-panel="outcomes">
+                            <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-seedling mr-2"></i>ผลลัพธ์ (Outcomes)</h4>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="form-label">การเปลี่ยนแปลงที่คาดหวัง</label>
+                                    <textarea id="i_outcome" rows="4" class="form-control resize-none" placeholder="ระบุว่ากลุ่มเป้าหมายเปลี่ยนแปลงอย่างไร เช่น ทักษะ รายได้ พฤติกรรม คุณภาพชีวิต หรือความสามารถในการเข้าถึงบริการ"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">ผู้มีส่วนได้ส่วนเสียที่ได้รับผลลัพธ์</label>
+                                    <textarea id="i_outcome_stakeholders" rows="2" class="form-control resize-none" placeholder="ระบุกลุ่มที่เกิด outcome นี้โดยตรง"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-panel hidden" data-pathway-panel="impacts">
+                            <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-chart-line mr-2"></i>ผลกระทบ (Impacts)</h4>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="form-label">มิติเศรษฐกิจ</label>
+                                    <textarea id="i_impact_economic" rows="2" class="form-control resize-none" placeholder="เช่น รายได้เพิ่ม ต้นทุนลด การจ้างงาน หรือมูลค่าทางเศรษฐกิจในพื้นที่"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">มิติสังคม</label>
+                                    <textarea id="i_impact_social" rows="2" class="form-control resize-none" placeholder="เช่น ความเป็นอยู่ดีขึ้น เครือข่ายชุมชนเข้มแข็ง ความเหลื่อมล้ำลดลง"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">มิติสิ่งแวดล้อม</label>
+                                    <textarea id="i_impact_environment" rows="2" class="form-control resize-none" placeholder="เช่น ลดของเสีย ลดคาร์บอน ฟื้นฟูทรัพยากร หรือใช้ทรัพยากรอย่างยั่งยืน"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-panel hidden" data-pathway-panel="indicators">
+                            <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-route text-chula mr-2"></i>I3 Indicator และ Theory of Change</h4>
+                            <div class="mb-4">
+                                <label class="form-label">ข้อความ Theory of Change รูปแบบ "ถ้า...แล้ว..."</label>
+                                <textarea id="i_toc_statement" rows="3" class="form-control resize-none" placeholder="ถ้า...ดำเนินกิจกรรม/ส่งมอบผลผลิต...แล้ว...กลุ่มเป้าหมายจะเกิดการเปลี่ยนแปลง..."></textarea>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="form-label">Indicator ของ Output</label>
+                                    <textarea id="i_indicator_output" rows="3" class="form-control resize-none" placeholder="เช่น จำนวนผู้เข้าร่วม จำนวนชั่วโมงอบรม จำนวนชุดข้อมูล"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">Indicator ของ Outcome</label>
+                                    <textarea id="i_indicator_outcome" rows="3" class="form-control resize-none" placeholder="เช่น รายได้เฉลี่ยเพิ่มขึ้น คะแนนทักษะดีขึ้น อัตราเข้าถึงบริการเพิ่ม"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">Indicator ของ Impact</label>
+                                    <textarea id="i_indicator_impact" rows="3" class="form-control resize-none" placeholder="เช่น คุณภาพชีวิตดีขึ้น ความเหลื่อมล้ำลดลง ปริมาณขยะลดลง"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step-4" class="step-content hidden fade-in">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2 border-b-2 border-chula pb-2 inline-block">4. การลงพื้นที่ (Site Visit)</h3>
+                    <p class="text-gray-500 mb-6 text-sm">ข้อมูลเชิงประจักษ์จากการลงพื้นที่และสัมภาษณ์กลุ่มเป้าหมาย <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full ml-1">ไม่บังคับกรอก</span></p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">อัปโหลดภาพถ่ายจาก Site Visit</label>
+                            <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition cursor-pointer relative" id="photo-upload-box">
+                                <input type="file" id="sv_photo" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="appState.previewImage(event)">
+                                <div id="photo-placeholder">
+                                    <i class="fa-solid fa-cloud-arrow-up text-4xl text-gray-400 mb-2"></i>
+                                    <p class="text-sm text-gray-500">คลิก หรือ ลากไฟล์รูปภาพมาวางที่นี่</p>
+                                </div>
+                                <img id="photo-preview" class="hidden max-h-48 mx-auto rounded shadow-sm" alt="Preview">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Quote จาก Focus Group Interview</label>
+                            <textarea id="sv_quote" rows="6" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-chula outline-none resize-none text-gray-700 italic" placeholder="เช่น 'โครงการนี้ช่วยให้คนในชุมชนมีรายได้เพิ่มขึ้นจริง และลดหนี้สินได้กว่า 30%' - ตัวแทนชุมชน"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step-5" class="step-content hidden fade-in">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2 border-b-2 border-chula pb-2 inline-block">5. S2 การคำนวณ SROI</h3>
+                    <p class="text-gray-500 mb-6 text-sm">เพิ่ม outcome rows ตาม SROI Value Map ระบบจะรวม Present Value, Net Present Value และ SROI Ratio ให้อัตโนมัติ</p>
+
+                    <div class="space-y-5">
+                        <div class="sroi-metric-bar">
+                            <div>
+                                <h4 class="font-bold text-gray-900">SROI Value Map</h4>
+                                <p class="text-xs text-gray-600">คำนวณจาก outcome rows ตาม stakeholder และผลลัพธ์ที่ประเมินมูลค่า</p>
+                            </div>
+                            <div class="flex flex-col lg:flex-row lg:items-center gap-4 w-full lg:w-auto">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 lg:w-[520px]">
+                                    <div class="sroi-metric-card">
+                                        <span>Total PV</span>
+                                        <strong id="preview_total_pv">0.00 บาท</strong>
+                                    </div>
+                                    <div class="sroi-metric-card">
+                                        <span>NPV</span>
+                                        <strong id="preview_npv">0.00 บาท</strong>
+                                    </div>
+                                    <div class="sroi-metric-card sroi-metric-card-primary">
+                                        <span>SROI Ratio</span>
+                                        <strong id="preview_sroi_ratio">1 : 0.00</strong>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="appState.addSROIRow()" class="bg-chula hover:bg-chula-dark text-white px-4 py-2 rounded-lg shadow-sm text-sm font-semibold transition-colors whitespace-nowrap">
+                                    <i class="fa-solid fa-plus mr-2"></i>Add outcome row
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="sroi-rows-container" class="space-y-4"></div>
+
+                        <div id="sroi-validation-panel" class="sroi-validation-panel">
+                            <div class="flex items-start gap-3">
+                                <i id="sroi-validation-icon" class="fa-solid fa-circle-check mt-1"></i>
+                                <div class="min-w-0">
+                                    <h4 id="sroi-validation-title" class="font-bold">ข้อมูลพร้อมคำนวณ</h4>
+                                    <div id="sroi-validation-list" class="mt-1 text-sm space-y-1"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <details class="sroi-section">
+                            <summary class="cursor-pointer list-none">
+                                <div class="flex items-center justify-between gap-3">
+                                    <h4 class="font-bold text-gray-900"><i class="fa-solid fa-square-root-variable text-chula mr-2"></i>ดูสูตรและตาราง PV รายปี</h4>
+                                    <span class="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1">optional</span>
+                                </div>
+                            </summary>
+                            <div id="formula-breakdown" class="mt-4"></div>
+                        </details>
+                    </div>
+                </div>
+
+                <div id="step-6" class="step-content hidden fade-in">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-2xl font-bold text-gray-900 border-b-2 border-chula pb-2 inline-block">6. รายงานผลประเมิน SROI</h3>
+                        <button onclick="appState.exportPDF()" class="bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-lg shadow-md transition-colors">
+                            <i class="fa-solid fa-file-pdf mr-2 text-red-400"></i>ส่งออกเป็น PDF
+                        </button>
+                        <button id="btn-save-assessment" onclick="appState.confirmAndSave()" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4">
+                            บันทึกผลประเมิน <i class="fa-solid fa-floppy-disk ml-2"></i>
+                        </button>
+                        <a href="dashboard.html" class="bg-gray-500 hover:bg-gray-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4">
+                            กลับหน้าหลัก <i class="fa-solid fa-house ml-2"></i>
+                        </a>
+                    </div>
+
+                    <div id="report-container" class="print-friendly mt-4 space-y-4">
+
+                        <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <div class="w-11 h-11 shrink-0 bg-chula rounded-xl flex items-center justify-center text-white text-lg">
+                                    <i class="fa-solid fa-graduation-cap"></i>
+                                </div>
+                                <div>
+                                    <h2 class="text-lg font-bold text-gray-900" id="r_projectName">ชื่อโครงการ</h2>
+                                    <p class="text-gray-400 text-xs">
+                                        <span id="r_responsible">-</span> &middot; <span id="r_area">-</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100"><span id="r_objective">-</span></p>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-[220px_1fr] gap-4">
+                            <div class="bg-chula bg-opacity-10 border border-chula border-opacity-30 rounded-2xl p-5 text-center flex flex-col justify-center">
+                                <h4 class="text-xs font-bold text-chula-darker mb-1">SROI Ratio</h4>
+                                <div class="text-3xl font-black text-chula-dark my-1"><span id="r_sroi_ratio">0.00</span> : 1</div>
+                                <p class="text-xs text-gray-600">ทุก ๆ การลงทุน 1 บาท<br>สร้างมูลค่า <span id="r_sroi_value" class="font-bold text-chula-darker">0.00</span> บาท</p>
+                            </div>
+
+                            <div class="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
+                                <div class="flex items-center justify-between px-4 py-2.5">
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-sack-dollar text-gray-400 w-3 text-xs"></i>มูลค่าการลงทุน</span>
+                                    <span id="r_val_invest" class="font-mono font-medium text-sm text-gray-900">0.00</span>
+                                </div>
+                                <div class="flex items-center justify-between px-4 py-2.5">
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-chart-line text-chula w-3 text-xs"></i>มูลค่าปัจจุบันของผลลัพธ์</span>
+                                    <span id="r_val_outcome" class="font-mono font-medium text-sm text-gray-900">0.00</span>
+                                </div>
+                                <div class="flex items-center justify-between px-4 py-2.5">
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-minus text-red-400 w-3 text-xs"></i>หัก กรณีฐาน (Base Case)</span>
+                                    <span id="r_val_base" class="font-mono font-medium text-sm text-red-500">- 0.00</span>
+                                </div>
+                                <div class="flex items-center justify-between px-4 py-2.5">
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-3 text-xs"></i>มูลค่าผลลัพธ์สุทธิ</span>
+                                    <span id="r_val_net_outcome" class="font-mono font-medium text-sm text-green-600">0.00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div class="lg:col-span-2 bg-white border border-gray-200 rounded-2xl p-5">
+                                <h4 class="font-bold text-gray-800 border-l-4 border-chula pl-2 mb-3 text-sm">ห่วงโซ่ผลกระทบ (Impact Pathway)</h4>
+                                <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-xs mb-4">
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">ทรัพยากรบุคคล</strong>
+                                        <span id="r_manpower" class="text-gray-700">-</span>
+                                    </div>
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">งบประมาณ</strong>
+                                        <span id="r_budget" class="text-gray-700">-</span>
+                                    </div>
+                                    
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">กิจกรรม</strong>
+                                        <span id="r_activities" class="text-gray-700">-</span>
+                                    </div>
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลผลิต</strong>
+                                        <span id="r_output" class="text-gray-700">-</span>
+                                    </div>
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลลัพธ์</strong>
+                                        <span id="r_outcome" class="text-gray-700">-</span>
+                                    </div>
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลกระทบ</strong>
+                                        <span id="r_impact" class="text-gray-700">-</span>
+                                    </div>
+                                </div>
+                                <div class="pt-3 border-t border-gray-100">
+                                    <h4 class="font-bold text-gray-800 border-l-4 border-chula pl-2 mb-2 text-sm">ความสอดคล้องกับ SDGs</h4>
+                                    <div id="r_sdgs" class="flex flex-wrap gap-2 text-sm"></div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white border border-gray-200 rounded-2xl p-5">
+                                <h4 class="font-bold text-gray-800 border-l-4 border-chula pl-2 mb-2 text-sm">ข้อมูลจากการลงพื้นที่</h4>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <img id="r_photo" src="" alt="Site Visit" class="max-w-full h-28 w-full object-cover rounded-lg shadow-sm hidden border">
+                                    <blockquote class="border-l-4 border-gray-300 pl-3 py-1 italic text-gray-600 bg-gray-50 rounded-r text-sm flex items-center">
+                                        "<span id="r_quote">-</span>"
+                                    </blockquote>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-center text-xs text-gray-400">
+                            เอกสารสร้างโดยระบบประเมิน SROI จุฬาลงกรณ์มหาวิทยาลัย
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-between items-center border-t border-gray-100 pt-6" id="form-navigation">
+                    <button id="btn-prev" onclick="appState.prevStep()" class="hidden px-6 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium">
+                        <i class="fa-solid fa-arrow-left mr-2"></i>ย้อนกลับ
+                    </button>
+                    <div class="flex-grow"></div>
+                    <button id="btn-next" onclick="appState.nextStep()" class="px-6 py-2 bg-chula hover:bg-chula-dark text-white rounded-lg shadow transition-colors font-medium">
+                        ถัดไป <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t border-gray-200 mt-auto py-4 text-center text-xs text-gray-500">
+        &copy; 2026 Chulalongkorn University. SROI Evaluation Prototype. All rights reserved.
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
