@@ -80,13 +80,12 @@ export const appState = {
 
     async login() {
         console.log("Attempting to log in with Chula Google OAuth...");
-
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 queryParams: {
                     hd: 'student.chula.ac.th',
-                    prompt: 'select_account' // Forces Google account chooser to prevent auto-login
+                    prompt: 'select_account' 
                 },
                 redirectTo: `${window.location.origin}/dashboard.html`
             }
@@ -95,7 +94,6 @@ export const appState = {
         if (error) {
             console.error("Login failed:", error);
             alert("เกิดข้อผิดพลาดในการเข้าสู่ระบบ (Login error occurred)");
-            return;
         }
     },
 
@@ -106,7 +104,7 @@ export const appState = {
             console.error("Error signing out:", error);
         }
 
-        // Wipe all project draft keys from localStorage so data doesn't carry over
+        // Wipe all project draft keys from localStorage
         Object.keys(localStorage).forEach(key => {
             if (key.startsWith('sroi-evaluation-draft')) {
                 localStorage.removeItem(key);
@@ -119,9 +117,7 @@ export const appState = {
         this.isViewMode = false;
 
         document.querySelectorAll('input, textarea').forEach(el => {
-            if (el.type !== 'file') {
-                el.value = '';
-            }
+            if (el.type !== 'file') el.value = '';
         });
         document.querySelectorAll('select').forEach(el => { el.selectedIndex = 0; });
         document.querySelectorAll('.sdg-checkbox').forEach(cb => cb.checked = false);
@@ -131,7 +127,11 @@ export const appState = {
     },
 
     goHome() {
-        if(this.currentView === 'view-app' && !confirm('ข้อมูลถูกบันทึกเป็น draft บนเครื่องนี้ ต้องการกลับสู่หน้าหลักหรือไม่?')) return;
+        if (this.currentView === 'view-app' && !this.isViewMode) {
+            if (!confirm('ข้อมูลถูกบันทึกเป็น draft บนเครื่องนี้ ต้องการกลับสู่หน้าหลักหรือไม่?')) {
+                return;
+            }
+        }
         window.location.href = '/dashboard.html';
     },
 
@@ -145,9 +145,7 @@ export const appState = {
                 <label class="cursor-pointer relative sdg-card" data-sdg-card data-search="${this.escapeHTML(search)}">
                     <input type="checkbox" class="sdg-checkbox peer sr-only" value="${this.escapeHTML(value)}" data-sdg-id="${sdg.id}">
                     <div class="h-full p-3 border-2 border-gray-200 rounded-lg hover:border-chula-light transition-colors text-sm flex items-start gap-3">
-                        <div class="w-8 h-8 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-500">
-                            ${sdg.id}
-                        </div>
+                        <div class="w-8 h-8 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-500">${sdg.id}</div>
                         <div>
                             <span class="font-semibold text-gray-800 leading-tight block">${this.escapeHTML(sdg.title)}</span>
                             <span class="text-xs text-gray-500 leading-snug mt-1 block">${this.escapeHTML(sdg.focus)}</span>
@@ -161,13 +159,20 @@ export const appState = {
 
     renderStepper() {
         const container = document.getElementById('stepper-container').querySelector('.flex');
-        let stepsHtml = '';
+        container.classList.remove('items-center');
+        container.classList.add('items-start');
+        
+        let stepsHtml = '<div class="absolute left-0 top-4 transform -translate-y-1/2 w-full h-1 bg-gray-200 z-0"></div>';
         const stepNames = ["Metadata", "I1 SDGs", "I2/I3 Pathway", "S1 Evidence", "S2 SROI", "S3 Report"];
         
         for(let i=1; i<=this.totalSteps; i++) {
+            const isLastStep = (i === this.totalSteps);
+            const clickEvent = isLastStep ? '' : `onclick="appState.goToStep(${i})"`;
+            const cursorStyle = isLastStep ? 'cursor-default opacity-80' : 'cursor-pointer hover:opacity-75';
+
             stepsHtml += `
-                <div class="flex flex-col items-center relative z-10 w-1/6 cursor-pointer hover:opacity-75" id="step-indicator-${i}" onclick="appState.goToStep(${i})">
-                    <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm bg-white transition-colors duration-300 ${i===1 ? 'step-active' : 'step-inactive'}">
+                <div class="flex flex-col items-center relative z-10 w-1/6 ${cursorStyle}" id="step-indicator-${i}" ${clickEvent}>
+                    <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm bg-white transition-colors duration-300 ${i===1 ? 'border-chula text-chula' : 'border-gray-300 text-gray-400'}">
                         ${i}
                     </div>
                     <span class="text-xs mt-2 font-medium ${i===1 ? 'text-chula' : 'text-gray-400'} hidden md:block text-center px-1">${stepNames[i-1]}</span>
@@ -178,7 +183,9 @@ export const appState = {
     },
 
     goToStep(step) {
-        if (this.isViewMode && step !== this.totalSteps) {
+        if (step === this.totalSteps) return; 
+
+        if (this.isViewMode) {
             alert("กรุณากดปุ่ม 'แก้ไขข้อมูล' ก่อนทำการแก้ไข (Please click the Edit button before modifying data)");
             return;
         }
@@ -195,26 +202,26 @@ export const appState = {
         
         setTimeout(() => {
             const firstInput = document.getElementById('m_projectName');
-            if (firstInput) {
-                firstInput.focus();
-            }
+            if (firstInput) firstInput.focus();
         }, 50);
     },
 
     updateStepUI() {
         for(let i=1; i<=this.totalSteps; i++) {
             const indicator = document.getElementById(`step-indicator-${i}`);
+            if (!indicator) continue;
+            
             const circle = indicator.querySelector('div');
             const text = indicator.querySelector('span');
             
             if(i === this.currentStep) {
-                circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 step-active";
+                circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 border-chula text-chula bg-white";
                 text.className = "text-xs mt-2 font-medium text-chula hidden md:block text-center px-1";
             } else if (i < this.currentStep) {
-                circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 bg-chula-light border-chula-light text-white";
-                text.className = "text-xs mt-2 font-medium text-gray-600 hidden md:block text-center px-1";
+                circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 bg-chula border-chula text-white";
+                text.className = "text-xs mt-2 font-medium text-gray-900 hidden md:block text-center px-1";
             } else {
-                circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 step-inactive";
+                circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 border-gray-300 text-gray-400 bg-white";
                 text.className = "text-xs mt-2 font-medium text-gray-400 hidden md:block text-center px-1";
             }
         }
@@ -224,40 +231,35 @@ export const appState = {
 
         const btnPrev = document.getElementById('btn-prev');
         const btnNext = document.getElementById('btn-next');
+        const btnFinalSave = document.getElementById('btn-final-save');
+        const btnSaveStep = document.getElementById('btn-save-step');
         const formNav = document.getElementById('form-navigation');
 
         if (this.currentStep === 1) {
-            btnPrev.classList.add('hidden');
+            if (btnPrev) btnPrev.classList.add('hidden');
         } else {
-            btnPrev.classList.remove('hidden');
+            if (btnPrev) btnPrev.classList.remove('hidden');
         }
 
         if (this.currentStep === this.totalSteps) {
-            formNav.classList.add('hidden');
+            if (formNav) formNav.classList.add('hidden');
             this.generateReport(); 
-            
-            const btnSave = document.getElementById('btn-save-assessment');
-            if (btnSave) {
-                if (this.isViewMode) {
-                    btnSave.innerHTML = 'แก้ไขข้อมูล <i class="fa-solid fa-pen-to-square ml-2"></i>';
-                    btnSave.className = 'bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
-                    btnSave.setAttribute('onclick', 'appState.enableEditMode()');
-                } else {
-                    btnSave.innerHTML = 'บันทึกผลประเมิน <i class="fa-solid fa-floppy-disk ml-2"></i>';
-                    btnSave.className = 'bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
-                    btnSave.setAttribute('onclick', 'appState.confirmAndSave()');
-                }
-            }
         } else {
-            formNav.classList.remove('hidden');
-            if (this.currentStep === this.totalSteps - 1) {
-                btnNext.innerHTML = 'ประมวลผลรายงาน <i class="fa-solid fa-file-invoice ml-2"></i>';
-                btnNext.classList.remove('bg-chula');
-                btnNext.classList.add('bg-gray-900', 'hover:bg-black');
+            if (formNav) formNav.classList.remove('hidden');
+            
+            if (this.currentStep === 5 && !this.isViewMode) {
+                if (btnNext) btnNext.classList.add('hidden');
+                if (btnFinalSave) btnFinalSave.classList.remove('hidden');
             } else {
-                btnNext.innerHTML = 'ถัดไป <i class="fa-solid fa-arrow-right ml-2"></i>';
-                btnNext.classList.add('bg-chula');
-                btnNext.classList.remove('bg-gray-900', 'hover:bg-black');
+                if (btnNext) btnNext.classList.remove('hidden');
+                if (btnFinalSave) btnFinalSave.classList.add('hidden');
+                if (btnNext) btnNext.innerHTML = 'ถัดไป <i class="fa-solid fa-arrow-right ml-2"></i>';
+            }
+            
+            if (this.isViewMode) {
+                if (btnSaveStep) btnSaveStep.classList.add('hidden');
+            } else {
+                if (btnSaveStep) btnSaveStep.classList.remove('hidden');
             }
         }
 
@@ -282,9 +284,7 @@ export const appState = {
                 const currentStepContainer = document.getElementById(`step-${this.currentStep}`);
                 if (currentStepContainer) {
                     const firstInput = currentStepContainer.querySelector('input[type="text"], input[type="number"], textarea');
-                    if (firstInput) {
-                        firstInput.focus();
-                    }
+                    if (firstInput) firstInput.focus();
                 }
             }, 50);
         }
@@ -297,15 +297,27 @@ export const appState = {
 
     nextStep() {
         if (this.currentStep < this.totalSteps) {
+            this.saveDraft();
             this.currentStep++;
             this.updateStepUI();
             window.scrollTo({top: 0, behavior: 'smooth'});
+        }
+    },
+
+    saveCurrentStepLocal() {
+        this.saveDraft();
+        const btn = document.getElementById('btn-save-step');
+        if (btn) {
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>บันทึกแล้ว (Saved)';
+            btn.classList.replace('text-chula', 'text-green-600');
+            btn.classList.replace('border-chula', 'border-green-600');
             
-            const mockDataToSave = {
-                projectName: document.getElementById('m_projectName')?.value || "Untitled",
-                currentStep: this.currentStep
-            };
-            saveProjectData(mockDataToSave);
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.replace('text-green-600', 'text-chula');
+                btn.classList.replace('border-green-600', 'border-chula');
+            }, 2000);
         }
     },
 
@@ -345,7 +357,6 @@ export const appState = {
             }).addTo(this.areaMap);
             this.areaMap.on('click', (event) => {
                 if (this.mapSelectionMode === 'area') return;
-
                 this.setProjectLocation({
                     lat: event.latlng.lat,
                     lng: event.latlng.lng,
@@ -1069,14 +1080,8 @@ export const appState = {
 
     isSROIRowStarted(row) {
         const textFields = [
-            'stakeholderGroup',
-            'inputDescription',
-            'outputSummary',
-            'changeDepth',
-            'weighting',
-            'outcomeDescription',
-            'valuationApproach',
-            'indicatorSource'
+            'stakeholderGroup', 'inputDescription', 'outputSummary', 'changeDepth',
+            'weighting', 'outcomeDescription', 'valuationApproach', 'indicatorSource'
         ];
         const moneyFields = ['groupSize', 'investment', 'quantity', 'monetaryValue'];
         const adjustmentFields = ['deadweight', 'displacement', 'attribution', 'dropoff'];
@@ -1127,19 +1132,8 @@ export const appState = {
         }
 
         return {
-            row,
-            investment,
-            quantity,
-            monetaryValue,
-            duration,
-            discountRate,
-            deadweight,
-            displacement,
-            attribution,
-            dropoff,
-            adjustedAnnualValue,
-            yearlyValues,
-            totalPV,
+            row, investment, quantity, monetaryValue, duration, discountRate, deadweight,
+            displacement, attribution, dropoff, adjustedAnnualValue, yearlyValues, totalPV,
             netPresentValue: totalPV - investment,
             sroiRatio: investment > 0 ? totalPV / investment : 0
         };
@@ -1153,10 +1147,7 @@ export const appState = {
         const yearlyValues = Array.from({ length: 6 }, (_, index) => rows.reduce((sum, row) => sum + row.yearlyValues[index], 0));
 
         return {
-            rows,
-            investment,
-            adjustedAnnualValue,
-            totalPV,
+            rows, investment, adjustedAnnualValue, totalPV,
             netPresentValue: totalPV - investment,
             sroiRatio: investment > 0 ? totalPV / investment : 0,
             yearlyValues
@@ -1182,11 +1173,8 @@ export const appState = {
         const quantity = this.parseNumberValue(row.quantity);
         const duration = this.parseNumberValue(row.duration);
         const percentageFields = [
-            ['deadweight', 'Deadweight'],
-            ['displacement', 'Displacement'],
-            ['attribution', 'Attribution'],
-            ['dropoff', 'Drop-off'],
-            ['discountRate', 'Discount rate']
+            ['deadweight', 'Deadweight'], ['displacement', 'Displacement'],
+            ['attribution', 'Attribution'], ['dropoff', 'Drop-off'], ['discountRate', 'Discount rate']
         ];
 
         if (result.investment <= 0) messages.push('กรอกมูลค่าการลงทุนรวม');
@@ -1553,54 +1541,71 @@ export const appState = {
     },
 
     async confirmAndSave() {
-        if (confirm('คุณต้องการบันทึกผลการประเมินนี้ใช่หรือไม่? (Do you want to save this assessment?)')) {
-            
-            const btn = document.getElementById('btn-save-assessment');
-            const originalText = btn ? btn.innerHTML : 'บันทึกผลประเมิน';
-            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
+        const btn = document.getElementById('modal-btn-confirm');
+        const originalText = btn ? btn.innerHTML : 'ยืนยันและบันทึกถาวร';
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
 
-            const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
+        const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
 
-            const projectData = {
-                currentStep: this.currentStep,
-                sroiCalculations: this.calculateSROI(),
-                inputs: {
-                    m_projectName: document.getElementById('m_projectName')?.value || '',
-                    m_responsible: document.getElementById('m_responsible')?.value || '',
-                    m_area: document.getElementById('m_area')?.value || '',
-                    m_objective: document.getElementById('m_objective')?.value || '',
-                    sdgs: selectedSDGs,
-                    i_manpower: document.getElementById('i_manpower')?.value || '',
-                    i_budget: document.getElementById('i_budget')?.value || '',
-                    i_activities: document.getElementById('i_activities')?.value || '',
-                    i_output: document.getElementById('i_output')?.value || '',
-                    i_outcome: document.getElementById('i_outcome')?.value || '',
-                    i_impact: document.getElementById('i_impact')?.value || '',
-                    sv_quote: document.getElementById('sv_quote')?.value || '',
-                    c_outcome_value: document.getElementById('c_outcome_value')?.value || '',
-                    c_base_case: document.getElementById('c_base_case')?.value || '',
-                    c_investment: document.getElementById('c_investment')?.value || '',
-                    uploadedImage: this.uploadedImage 
-                }
-            };
+        // Capture draft key before URL changes
+        const draftKeyToClear = getDraftKey();
 
-            const isSuccess = await saveProjectData(projectData);
-
-            if (isSuccess) {
-                // Clear local storage draft for this specific project since it's now officially saved to Supabase
-                localStorage.removeItem(getDraftKey());
-
-                if (btn) btn.innerHTML = originalText;
-                this.isViewMode = true;
-                this.updateStepUI(); 
-                alert('บันทึกข้อมูลสำเร็จ (Data saved successfully!)');
-            } else {
-                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง (Error saving data)');
-                if (btn) btn.innerHTML = originalText;
+        const projectData = {
+            currentStep: 6, 
+            sroiCalculations: this.calculateSROI(),
+            sroiRows: this.sroiRows,
+            inputs: {
+                m_projectName: this.getValue('m_projectName'),
+                m_responsible: this.getValue('m_responsible'),
+                m_area: this.getValue('m_area'),
+                m_objective: this.getValue('m_objective'),
+                m_lat: this.getValue('m_lat'),
+                m_lng: this.getValue('m_lng'),
+                m_place_name: this.getValue('m_place_name'),
+                m_osm_id: this.getValue('m_osm_id'),
+                m_location_type: this.getValue('m_location_type'),
+                m_location_label: this.getValue('m_location_label'),
+                m_bounds_south: this.getValue('m_bounds_south'),
+                m_bounds_north: this.getValue('m_bounds_north'),
+                m_bounds_west: this.getValue('m_bounds_west'),
+                m_bounds_east: this.getValue('m_bounds_east'),
+                sdgs: selectedSDGs,
+                i_inputs: this.getValue('i_inputs'),
+                i_knowledge: this.getValue('i_knowledge'),
+                i_stakeholders: this.getValue('i_stakeholders'),
+                i_activities: this.getValue('i_activities'),
+                i_output: this.getValue('i_output'),
+                i_output_sdg: this.getValue('i_output_sdg'),
+                i_outcome: this.getValue('i_outcome'),
+                i_outcome_stakeholders: this.getValue('i_outcome_stakeholders'),
+                i_impact_economic: this.getValue('i_impact_economic'),
+                i_impact_social: this.getValue('i_impact_social'),
+                i_impact_environment: this.getValue('i_impact_environment'),
+                i_toc_statement: this.getValue('i_toc_statement'),
+                i_indicator_output: this.getValue('i_indicator_output'),
+                i_indicator_outcome: this.getValue('i_indicator_outcome'),
+                i_indicator_impact: this.getValue('i_indicator_impact'),
+                sv_quote: this.getValue('sv_quote'),
+                uploadedImage: this.uploadedImage 
             }
+        };
+
+        const isSuccess = await saveProjectData(projectData);
+
+        if (isSuccess) {
+            localStorage.removeItem(draftKeyToClear);
+            if (btn) btn.innerHTML = originalText;
+            this.hideRecheckModal();
+            this.isViewMode = true;
+            this.currentStep = 6;
+            this.updateStepUI(); 
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        } else {
+            alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง (Error saving data)');
+            if (btn) btn.innerHTML = originalText;
         }
     },
-
+    
     escapeHTML(value) {
         return String(value ?? '')
             .replaceAll('&', '&amp;')
@@ -1608,9 +1613,19 @@ export const appState = {
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+    },
+    
+    showRecheckModal() {
+        this.generateReport();
+        const reportHTML = document.getElementById('report-container').innerHTML;
+        document.getElementById('modal-report-content').innerHTML = reportHTML;
+        document.getElementById('recheck-modal').classList.remove('hidden');
+    },
+
+    hideRecheckModal() {
+        document.getElementById('recheck-modal').classList.add('hidden');
     }
 };
-
 
 // ==========================================
 // SUPABASE LOGIC 
@@ -1665,33 +1680,56 @@ async function loadExistingProject(id, email) {
         return;
     }
 
-    if (project.assessment_data && project.assessment_data.inputs) {
-        const inputs = project.assessment_data.inputs;
-        const fieldsToRestore = [
-            'm_projectName', 'm_responsible', 'm_area', 'm_objective',
-            'i_manpower', 'i_budget', 'i_activities', 'i_output', 
-            'i_outcome', 'i_impact', 'sv_quote', 
-            'c_outcome_value', 'c_base_case', 'c_investment'
-        ];
+    if (project.assessment_data) {
+        const data = project.assessment_data;
 
-        fieldsToRestore.forEach(fieldId => {
-            const el = document.getElementById(fieldId);
-            if (el && inputs[fieldId] !== undefined) {
-                el.value = inputs[fieldId];
-            }
-        });
+        if (data.inputs) {
+            const inputs = data.inputs;
+            const fieldsToRestore = [
+                'm_projectName', 'm_responsible', 'm_area', 'm_objective',
+                'm_lat', 'm_lng', 'm_place_name', 'm_osm_id', 'm_location_type', 'm_location_label',
+                'm_bounds_south', 'm_bounds_north', 'm_bounds_west', 'm_bounds_east',
+                'i_inputs', 'i_knowledge', 'i_stakeholders', 'i_activities',
+                'i_output', 'i_output_sdg', 'i_outcome', 'i_outcome_stakeholders',
+                'i_impact_economic', 'i_impact_social', 'i_impact_environment',
+                'i_toc_statement', 'i_indicator_output', 'i_indicator_outcome', 'i_indicator_impact',
+                'sv_quote'
+            ];
 
-        if (inputs.sdgs && Array.isArray(inputs.sdgs)) {
-            document.querySelectorAll('.sdg-checkbox').forEach(cb => {
-                if (inputs.sdgs.includes(cb.value)) {
-                    cb.checked = true;
+            fieldsToRestore.forEach(fieldId => {
+                const el = document.getElementById(fieldId);
+                if (el && inputs[fieldId] !== undefined) {
+                    el.value = inputs[fieldId];
                 }
             });
+
+            if (inputs.sdgs && Array.isArray(inputs.sdgs)) {
+                document.querySelectorAll('.sdg-checkbox').forEach(cb => {
+                    if (inputs.sdgs.includes(cb.value)) {
+                        cb.checked = true;
+                    }
+                });
+                appState.updateSelectedSDGs(); 
+            }
+
+            if (inputs.uploadedImage) {
+                appState.uploadedImage = inputs.uploadedImage;
+                const preview = document.getElementById('photo-preview');
+                if (preview) {
+                    preview.src = inputs.uploadedImage;
+                    preview.classList.remove('hidden');
+                    document.getElementById('photo-placeholder')?.classList.add('hidden');
+                }
+            }
         }
 
-        if (inputs.uploadedImage) {
-            appState.uploadedImage = inputs.uploadedImage;
+        if (data.sroiRows && Array.isArray(data.sroiRows)) {
+            appState.sroiRows = data.sroiRows;
+            appState.renderSROIRows();
         }
+
+        appState.syncAreaMarkerFromFields();
+
     } else if (project.project_name) {
         const projectNameInput = document.getElementById('m_projectName');
         if (projectNameInput) projectNameInput.value = project.project_name;
@@ -1705,6 +1743,40 @@ async function loadExistingProject(id, email) {
 function initializeNewProject() {
     appState.isViewMode = false;
     appState.currentStep = 1;
+
+    // Check if this is a fresh visit from the dashboard (not just a page refresh)
+    const navEntries = performance.getEntriesByType("navigation");
+    if (navEntries.length > 0 && navEntries[0].type !== "reload") {
+        
+        // Wipe the lingering 'new' draft from the browser's local storage
+        localStorage.removeItem('sroi-evaluation-draft-new');
+        
+        // Force clear all text inputs currently on screen
+        document.querySelectorAll('input, textarea').forEach(el => {
+            if (el.type !== 'file' && el.type !== 'hidden') {
+                el.value = '';
+            }
+        });
+        
+        // Uncheck all SDGs
+        document.querySelectorAll('.sdg-checkbox').forEach(cb => cb.checked = false);
+        
+        // Reset complex states
+        appState.sroiRows = [appState.createSROIRow()];
+        appState.renderSROIRows();
+        appState.updateSelectedSDGs();
+        appState.clearAreaLocation();
+        appState.updateLiveSummary();
+        appState.uploadedImage = null;
+        
+        const preview = document.getElementById('photo-preview');
+        if (preview) {
+            preview.src = '';
+            preview.classList.add('hidden');
+            document.getElementById('photo-placeholder')?.classList.remove('hidden');
+        }
+    }
+
     appState.updateStepUI();
 }
 
@@ -1719,10 +1791,17 @@ export async function saveProjectData(currentProjectData) {
         return false;
     }
 
+    // 🌟 FIX: Grab the latest project name regardless of whether it's new or an update
+    const projectNameInput = document.getElementById('m_projectName');
+    const finalProjectName = (projectNameInput && projectNameInput.value.trim() !== "") 
+        ? projectNameInput.value 
+        : "ไม่ได้ระบุชื่อโครงการ";
+
     if (projectId) {
         const { error } = await supabase
             .from('projects')
             .update({ 
+                project_name: finalProjectName, // <-- 🌟 ADDED THIS LINE: Updates the dashboard title!
                 assessment_data: currentProjectData,
                 last_page_url: window.location.href
             })
@@ -1736,9 +1815,6 @@ export async function saveProjectData(currentProjectData) {
             return true; 
         }
     } else {
-        const projectNameInput = document.getElementById('m_projectName');
-        const finalProjectName = (projectNameInput && projectNameInput.value) ? projectNameInput.value : "ไม่ได้ระบุชื่อโครงการ";
-
         const { data, error } = await supabase
             .from('projects')
             .insert([{ 
