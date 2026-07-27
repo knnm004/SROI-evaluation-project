@@ -44,7 +44,7 @@ async function fetchProjects(email) {
         .from('projects')
         .select('*')
         .eq('user_email', email)
-        .order('created_at', { ascending: false });
+        .order('updated_at', { ascending: false });
 
     if (error) {
         console.error("Error fetching projects:", error);
@@ -71,6 +71,9 @@ async function fetchProjects(email) {
         const dateStr = new Date(project.created_at).toLocaleDateString('th-TH', {
             year: 'numeric', month: 'short', day: 'numeric'
         });
+        const updatedDateStr = new Date(project.updated_at || project.created_at).toLocaleDateString('th-TH', {
+            year: 'numeric', month: 'short', day: 'numeric'
+        });
 
         const card = document.createElement('div');
         // Added 'relative' to the card classes so we can position the delete button perfectly
@@ -87,8 +90,11 @@ async function fetchProjects(email) {
                 <h3 class="text-xl font-bold text-gray-900 mb-2 pr-8 group-hover:text-chula transition-colors line-clamp-2">
                     ${project.project_name || 'ไม่ได้ระบุชื่อโครงการ (Untitled)'}
                 </h3>
-                <p class="text-sm text-gray-500 mb-4">
+                <p class="text-sm text-gray-500 mb-1">
                     <i class="fa-regular fa-calendar mr-1"></i> เริ่มต้นเมื่อ: ${dateStr}
+                </p>
+                <p class="text-sm text-gray-500 mb-4">
+                    <i class="fa-regular fa-clock mr-1"></i> แก้ไขล่าสุด: ${updatedDateStr}
                 </p>
             </div>
             
@@ -111,7 +117,7 @@ async function fetchProjects(email) {
             // Stop the click from opening the project!
             e.stopPropagation(); 
             
-            const isConfirmed = confirm(`คุณต้องการลบโครงการ "${project.project_name || 'ไม่ได้ระบุชื่อโครงการ'}" ใช่หรือไม่?\n(Are you sure you want to delete this project? This cannot be undone.)`);
+            const isConfirmed = confirm(`คุณต้องการลบโครงการ "${project.project_name || 'ไม่ได้ระบุชื่อโครงการ'}" ใช่หรือไม่?`);
             
             if (isConfirmed) {
                 // Change the icon to a spinner while deleting
@@ -132,7 +138,7 @@ async function fetchProjects(email) {
                 } 
                 // 3. Check for silent failures (RLS blocked it!)
                 else if (data && data.length === 0) {
-                    alert("ลบไม่สำเร็จ: ระบบความปลอดภัยของ Supabase บล็อกการลบ (Please enable DELETE in Supabase RLS Policies)");
+                    alert("ลบไม่สำเร็จ: ระบบความปลอดภัยของ Supabase บล็อกการลบ");
                     deleteBtn.innerHTML = '<i class="fa-solid fa-xmark text-lg"></i>'; 
                 } 
                 // 4. Success!

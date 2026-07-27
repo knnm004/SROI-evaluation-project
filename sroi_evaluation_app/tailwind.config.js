@@ -8,7 +8,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Sarabun', 'sans-serif'],
+        sans: ['ChulaCharasNew', 'Sarabun', 'sans-serif'],
       },
       colors: {
         chula: {

@@ -175,7 +175,7 @@ export const appState = {
                     <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm bg-white transition-colors duration-300 ${i===1 ? 'border-chula text-chula' : 'border-gray-300 text-gray-400'}">
                         ${i}
                     </div>
-                    <span class="text-xs mt-2 font-medium ${i===1 ? 'text-chula' : 'text-gray-400'} hidden md:block text-center px-1">${stepNames[i-1]}</span>
+                    <span class="text-xs mt-2 font-bold text-chula hidden md:block text-center px-1">${stepNames[i-1]}</span>
                 </div>
             `;
         }
@@ -1800,10 +1800,11 @@ export async function saveProjectData(currentProjectData) {
     if (projectId) {
         const { error } = await supabase
             .from('projects')
-            .update({ 
+            .update({
                 project_name: finalProjectName, // <-- 🌟 ADDED THIS LINE: Updates the dashboard title!
                 assessment_data: currentProjectData,
-                last_page_url: window.location.href
+                last_page_url: window.location.href,
+                updated_at: new Date().toISOString()
             })
             .eq('id', projectId);
             
