@@ -6,7 +6,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const DRAFT_KEY = 'sroi-evaluation-draft-v2';
+// Helper to scope draft keys per project ID so projects don't bleed into each other
+function getDraftKey() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id') || 'new';
+    return `sroi-evaluation-draft-${id}`;
+}
+
 const OSM_SEARCH_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_DEFAULT_CENTER = [13.7563, 100.5018];
@@ -30,24 +36,6 @@ const SDGs_LIST = [
     { id: 15, title: "ระบบนิเวศทางบก", focus: "ป่า ความหลากหลายทางชีวภาพ ที่ดิน" },
     { id: 16, title: "สังคมสงบสุข ยุติธรรม และสถาบันเข้มแข็ง", focus: "ธรรมาภิบาล ความยุติธรรม ความปลอดภัย" },
     { id: 17, title: "ความร่วมมือเพื่อการพัฒนาที่ยั่งยืน", focus: "เครือข่าย นโยบาย ความร่วมมือข้ามภาคส่วน" }
-];
-
-const PATHWAY_FIELDS = [
-    'i_inputs',
-    'i_knowledge',
-    'i_stakeholders',
-    'i_activities',
-    'i_output',
-    'i_output_sdg',
-    'i_outcome',
-    'i_outcome_stakeholders',
-    'i_impact_economic',
-    'i_impact_social',
-    'i_impact_environment',
-    'i_toc_statement',
-    'i_indicator_output',
-    'i_indicator_outcome',
-    'i_indicator_impact'
 ];
 
 export const appState = {
@@ -91,37 +79,55 @@ export const appState = {
     },
 
     async login() {
-        // 1. Grab the exact email and password the user typed into the screen
-        const emailInput = document.getElementById('login-email').value;
-        const passwordInput = document.getElementById('login-password').value;
+        console.log("Attempting to log in with Chula Google OAuth...");
 
-        // Make sure they actually typed something!
-        if (!emailInput || !passwordInput) {
-            alert("กรุณากรอกอีเมลและรหัสผ่าน (Please enter both email and password)");
-            return;
-        }
-
-        console.log(`Attempting to log in as: ${emailInput}`);
-        
-        // 2. Send the typed credentials to Supabase
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: emailInput,
-            password: passwordInput,
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                queryParams: {
+                    hd: 'student.chula.ac.th',
+                    prompt: 'select_account' // Forces Google account chooser to prevent auto-login
+                },
+                redirectTo: `${window.location.origin}/dashboard.html`
+            }
         });
 
         if (error) {
             console.error("Login failed:", error);
-            alert("อีเมลหรือรหัสผ่านไม่ถูกต้อง (Invalid email or password)");
+            alert("เกิดข้อผิดพลาดในการเข้าสู่ระบบ (Login error occurred)");
             return;
         }
-
-        // 3. Simulating the successful redirect back to the dashboard
-        window.location.href = '/dashboard.html';
     },
 
     async logout() {
-        await supabase.auth.signOut();
-        window.location.href = '/'; 
+        try {
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error("Error signing out:", error);
+        }
+
+        // Wipe all project draft keys from localStorage so data doesn't carry over
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('sroi-evaluation-draft')) {
+                localStorage.removeItem(key);
+            }
+        });
+
+        this.currentStep = 1;
+        this.uploadedImage = null;
+        this.sroiRows = [];
+        this.isViewMode = false;
+
+        document.querySelectorAll('input, textarea').forEach(el => {
+            if (el.type !== 'file') {
+                el.value = '';
+            }
+        });
+        document.querySelectorAll('select').forEach(el => { el.selectedIndex = 0; });
+        document.querySelectorAll('.sdg-checkbox').forEach(cb => cb.checked = false);
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+        window.location.href = window.location.pathname;
     },
 
     goHome() {
@@ -184,12 +190,9 @@ export const appState = {
 
     enableEditMode() {
         this.isViewMode = false;
-        
-        // 1. Automatically jump back to Step 1 so the user doesn't have to click the progress bar
         this.currentStep = 1;
         this.updateStepUI(); 
         
-        // 2. Force the browser to place the "blue cursor" inside the first text box instantly!
         setTimeout(() => {
             const firstInput = document.getElementById('m_projectName');
             if (firstInput) {
@@ -233,7 +236,6 @@ export const appState = {
             formNav.classList.add('hidden');
             this.generateReport(); 
             
-            // --- Toggle Save vs Edit Button ---
             const btnSave = document.getElementById('btn-save-assessment');
             if (btnSave) {
                 if (this.isViewMode) {
@@ -259,7 +261,6 @@ export const appState = {
             }
         }
 
-        // Lock/unlock inputs based on View Mode
         document.querySelectorAll('input, textarea, select').forEach(el => {
             if (this.isViewMode) {
                 el.disabled = true;
@@ -288,7 +289,6 @@ export const appState = {
             }, 50);
         }
 
-        // Friend's UI Updates (Summary & Map)
         this.updateLiveSummary();
         if (this.currentStep === 1) {
             window.setTimeout(() => this.initAreaMap(), 0);
@@ -1488,13 +1488,13 @@ export const appState = {
     },
 
     saveDraft() {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(this.collectDraft()));
+        localStorage.setItem(getDraftKey(), JSON.stringify(this.collectDraft()));
         const status = document.getElementById('draft-status');
         if (status) status.innerText = 'บันทึก draft แล้ว';
     },
 
     loadDraft() {
-        const rawDraft = localStorage.getItem(DRAFT_KEY);
+        const rawDraft = localStorage.getItem(getDraftKey());
         if (!rawDraft) return;
 
         try {
@@ -1587,6 +1587,9 @@ export const appState = {
             const isSuccess = await saveProjectData(projectData);
 
             if (isSuccess) {
+                // Clear local storage draft for this specific project since it's now officially saved to Supabase
+                localStorage.removeItem(getDraftKey());
+
                 if (btn) btn.innerHTML = originalText;
                 this.isViewMode = true;
                 this.updateStepUI(); 

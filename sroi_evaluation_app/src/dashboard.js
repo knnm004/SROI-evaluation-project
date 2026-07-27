@@ -25,8 +25,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     fetchProjects(userEmail);
 
     // 5. Bind Logout Button
-    document.getElementById('logout-btn').addEventListener('click', async () => {
+    document.getElementById('logout-btn')?.addEventListener('click', async () => {
+        // 1. Sign out from Supabase
         await supabase.auth.signOut();
+        
+        // 2. Clear cached local drafts
+        localStorage.clear(); 
+        
+        // 3. Redirect back to landing/login page cleanly
         window.location.href = '/';
     });
 });
