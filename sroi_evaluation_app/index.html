@@ -603,9 +603,53 @@
                     <button id="btn-prev" onclick="appState.prevStep()" class="hidden px-6 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium">
                         <i class="fa-solid fa-arrow-left mr-2"></i>ย้อนกลับ
                     </button>
-                    <div class="flex-grow"></div>
+                    <!-- Desktop-only, and deliberately 'hidden sm:flex': updateStepUI()
+                         shows and hides it by toggling sm:flex, never by removing
+                         'hidden'. See the comment there before changing these classes. -->
+                    <div class="flex-grow flex justify-center">
+                        <button id="btn-save-step" onclick="appState.saveCurrentStepLocal()" data-testid="btn-save-step" class="hidden sm:flex items-center px-6 py-2 border-2 border-chula text-chula rounded-lg hover:bg-chula-light hover:text-white transition-colors font-semibold">
+                            <i class="fa-solid fa-floppy-disk mr-2"></i>บันทึกข้อมูลหน้านี้ (Save Step)
+                        </button>
+                    </div>
+
                     <button id="btn-next" onclick="appState.nextStep()" class="px-6 py-2 bg-chula hover:bg-chula-dark text-white rounded-lg shadow transition-colors font-medium">
                         ถัดไป <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+
+                    <!-- Replaces btn-next on step 5, for editors only. -->
+                    <button id="btn-final-save" onclick="appState.showRecheckModal()" data-testid="btn-final-save" class="hidden px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition-colors font-bold">
+                        สรุปผลเป็นรายงาน <i class="fa-solid fa-clipboard-check ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RECHECK MODAL: the report, shown for approval before anything is written.
+             z-[1100] clears Leaflet's map panes and controls, which sit at z-index 400-1000
+             and otherwise punch through the backdrop on step 1. -->
+        <div id="recheck-modal" data-testid="recheck-modal" class="fixed inset-0 z-[1100] hidden bg-gray-900 bg-opacity-60 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col transform transition-all">
+                <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center text-white text-lg shadow-sm">
+                            <i class="fa-solid fa-clipboard-check"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 leading-tight">ตรวจสอบข้อมูล (Recheck Assessment)</h3>
+                            <p class="text-xs text-gray-500 mt-1">กรุณาตรวจสอบความถูกต้องของข้อมูลทั้งหมด ก่อนยืนยันบันทึกเข้าระบบ</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="appState.hideRecheckModal()" aria-label="ปิด" class="text-gray-400 hover:text-gray-600 bg-white hover:bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow bg-white" id="modal-report-content"></div>
+                <div class="p-5 border-t border-gray-200 bg-gray-50 flex justify-end gap-4 rounded-b-2xl">
+                    <button type="button" onclick="appState.hideRecheckModal()" class="px-6 py-2.5 border border-gray-300 text-gray-700 bg-white rounded-xl hover:bg-gray-50 font-semibold shadow-sm transition-colors">
+                        กลับไปแก้ไข
+                    </button>
+                    <button type="button" id="modal-btn-confirm" onclick="appState.confirmAndSave()" data-testid="modal-btn-confirm" class="px-8 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center">
+                        ยืนยัน <i class="fa-solid fa-cloud-arrow-up ml-2"></i>
                     </button>
                 </div>
             </div>

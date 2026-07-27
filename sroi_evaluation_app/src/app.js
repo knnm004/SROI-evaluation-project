@@ -534,6 +534,8 @@ export const appState = {
 
         const btnPrev = document.getElementById('btn-prev');
         const btnNext = document.getElementById('btn-next');
+        const btnSaveStep = document.getElementById('btn-save-step');
+        const btnFinalSave = document.getElementById('btn-final-save');
         const formNav = document.getElementById('form-navigation');
 
         if (this.currentStep === 1) {
@@ -575,6 +577,17 @@ export const appState = {
             }
         } else {
             formNav.classList.remove('hidden');
+
+            // On the last input step an editor gets "สรุปผลเป็นรายงาน" in place of
+            // "ถัดไป": it opens the recheck modal and saves, rather than silently
+            // walking onto a report of unsaved numbers. Read-only visitors keep plain
+            // "ถัดไป" -- they have nothing to commit, and step 6 stays reachable from
+            // the stepper for everyone either way.
+            const offerFinalSave = this.currentStep === this.totalSteps - 1 && !this.isViewMode;
+
+            if (btnFinalSave) btnFinalSave.classList.toggle('hidden', !offerFinalSave);
+            btnNext.classList.toggle('hidden', offerFinalSave);
+
             if (this.currentStep === this.totalSteps - 1) {
                 btnNext.innerHTML = 'ประมวลผลรายงาน <i class="fa-solid fa-file-invoice ml-2"></i>';
                 btnNext.classList.remove('bg-chula');
@@ -583,6 +596,18 @@ export const appState = {
                 btnNext.innerHTML = 'ถัดไป <i class="fa-solid fa-arrow-right ml-2"></i>';
                 btnNext.classList.add('bg-chula');
                 btnNext.classList.remove('bg-gray-900', 'hover:bg-black');
+            }
+
+            // Nothing to save while read-only, so the button would only confuse.
+            //
+            // Visibility is driven by sm:flex, NOT by toggling 'hidden'. The button is
+            // desktop-only ('hidden sm:flex'), and Tailwind emits media-query utilities
+            // after the base ones -- so sm:flex beats 'hidden' above 640px and adding
+            // 'hidden' would fail to hide it on exactly the screens it shows on.
+            // Leaving 'hidden' permanently on and gating sm:flex gets both states right.
+            if (btnSaveStep) {
+                btnSaveStep.classList.add('hidden');
+                btnSaveStep.classList.toggle('sm:flex', !this.isViewMode);
             }
         }
 
@@ -638,6 +663,33 @@ export const appState = {
         // column and destroyed every previously saved answer. Writes to the server
         // are now only ever explicit, via confirmAndSave().
         this.saveDraft();
+    },
+
+    // The autosave debounce and nextStep() both already write the draft, so this saves
+    // nothing new -- it exists so the user can SEE that their typing is safe without
+    // having to leave the step. Local draft only, like every other implicit write;
+    // reaching the database still takes confirmAndSave().
+    saveCurrentStepLocal() {
+        this.saveDraft();
+
+        const btn = document.getElementById('btn-save-step');
+        if (!btn) return;
+
+        // Guard against a double-click restoring the "Saved" label as the original.
+        if (btn.dataset.confirming === 'true') return;
+        btn.dataset.confirming = 'true';
+
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>บันทึกแล้ว (Saved)';
+        btn.classList.replace('text-chula', 'text-green-600');
+        btn.classList.replace('border-chula', 'border-green-600');
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.replace('text-green-600', 'text-chula');
+            btn.classList.replace('border-green-600', 'border-chula');
+            delete btn.dataset.confirming;
+        }, 2000);
     },
 
     prevStep() {
@@ -1851,29 +1903,71 @@ export const appState = {
     },
 
     async confirmAndSave() {
-        if (confirm('คุณต้องการบันทึกผลการประเมินนี้ใช่หรือไม่? (Do you want to save this assessment?)')) {
-            
-            const btn = document.getElementById('btn-save-assessment');
-            const originalText = btn ? btn.innerHTML : 'บันทึกผลประเมิน';
-            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
+        // Two entry points. The report-step button needs a confirm() of its own; the
+        // recheck modal's ยืนยัน button does not, because the modal -- which shows the
+        // whole report -- already IS the confirmation step.
+        const modal = document.getElementById('recheck-modal');
+        const fromModal = !!modal && !modal.classList.contains('hidden');
 
-            // Captures every field, the raw SROI rows, the map/location data, and the
-            // SDG reasons -- all of which the old hand-written list silently dropped.
-            const isSuccess = await saveProjectData(buildProjectPayload(this));
-
-            if (isSuccess) {
-                // Clear local storage draft for this specific project since it's now officially saved to Supabase
-                localStorage.removeItem(getDraftKey());
-
-                if (btn) btn.innerHTML = originalText;
-                this.isViewMode = true;
-                this.updateStepUI(); 
-                alert('บันทึกข้อมูลสำเร็จ (Data saved successfully!)');
-            } else {
-                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง (Error saving data)');
-                if (btn) btn.innerHTML = originalText;
-            }
+        if (!fromModal && !confirm('คุณต้องการบันทึกผลการประเมินนี้ใช่หรือไม่? (Do you want to save this assessment?)')) {
+            return;
         }
+
+        const btn = document.getElementById(fromModal ? 'modal-btn-confirm' : 'btn-save-assessment');
+        const originalText = btn ? btn.innerHTML : 'บันทึกผลประเมิน';
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
+
+        // Read the draft key BEFORE saving. For a first save saveProjectData() calls
+        // history.replaceState() to put ?id=<newId> in the URL, which changes what
+        // getDraftKey() returns -- clearing it afterwards would delete a key that never
+        // existed and strand the real 'sroi-evaluation-draft-new' entry forever.
+        const draftKeyToClear = getDraftKey();
+
+        // Captures every field, the raw SROI rows, the map/location data, and the
+        // SDG reasons -- all of which the old hand-written list silently dropped.
+        const isSuccess = await saveProjectData(buildProjectPayload(this));
+
+        if (btn) btn.innerHTML = originalText;
+
+        if (!isSuccess) {
+            alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง (Error saving data)');
+            return;
+        }
+
+        localStorage.removeItem(draftKeyToClear);
+
+        if (fromModal) {
+            // Saving from step 5 is what produces the report, so land the user on it.
+            this.hideRecheckModal();
+            this.currentStep = this.totalSteps;
+        }
+
+        this.isViewMode = true;
+        this.updateStepUI();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        // The modal path needs no alert: closing the modal onto the finished report is
+        // the confirmation. The step-6 button gives no such visual change, so it keeps one.
+        if (!fromModal) alert('บันทึกข้อมูลสำเร็จ (Data saved successfully!)');
+    },
+
+    // Step 5's "สรุปผลเป็นรายงาน" opens this instead of saving straight away: the
+    // report is rendered into the modal so it can be read before anything is committed.
+    // generateReport() writes into #report-container on the hidden step 6, and the
+    // markup is copied out of there -- so the modal always matches what step 6 will show.
+    showRecheckModal() {
+        this.generateReport();
+        const reportContainer = document.getElementById('report-container');
+        const modalContent = document.getElementById('modal-report-content');
+        const modal = document.getElementById('recheck-modal');
+        if (!reportContainer || !modalContent || !modal) return;
+
+        modalContent.innerHTML = reportContainer.innerHTML;
+        modal.classList.remove('hidden');
+    },
+
+    hideRecheckModal() {
+        document.getElementById('recheck-modal')?.classList.add('hidden');
     },
 
     escapeHTML
