@@ -430,7 +430,12 @@ export const appState = {
     },
 
     goHome() {
-        if(this.currentView === 'view-app' && !confirm('ข้อมูลถูกบันทึกเป็น draft บนเครื่องนี้ ต้องการกลับสู่หน้าหลักหรือไม่?')) return;
+        // Only prompt when there is unsaved typing to lose. A saved project opens
+        // read-only, so warning about a draft there was just a click to dismiss --
+        // and it fired on every visit to a finished report.
+        if (this.currentView === 'view-app' && !this.isViewMode) {
+            if (!confirm('ข้อมูลถูกบันทึกเป็น draft บนเครื่องนี้ ต้องการกลับสู่หน้าหลักหรือไม่?')) return;
+        }
         window.location.href = '/dashboard.html';
     },
 
