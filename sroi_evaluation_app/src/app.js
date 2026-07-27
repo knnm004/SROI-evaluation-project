@@ -542,6 +542,13 @@ export const appState = {
             btnPrev.classList.remove('hidden');
         }
 
+        // Hidden on the report step: #report-container already leads with the project
+        // name, so the chip would just repeat it directly above.
+        const projectTitleChipBar = document.getElementById('project-title-chip-bar');
+        if (projectTitleChipBar) {
+            projectTitleChipBar.classList.toggle('hidden', this.currentStep === this.totalSteps);
+        }
+
         if (this.currentStep === this.totalSteps) {
             formNav.classList.add('hidden');
             this.generateReport(); 

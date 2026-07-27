@@ -132,6 +132,7 @@
         <div id="view-app" class="hidden w-full max-w-6xl fade-in flex-grow flex flex-col">
             
             <div class="bg-white rounded-xl shadow-sm p-4 mb-6" id="stepper-container">
+                <h2 class="text-lg font-bold text-gray-800 mb-4" id="stepper-title">หัวข้อการประเมิน (Assessment Title Placeholder)</h2>
                 <div class="flex items-center justify-between relative">
                     <div class="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-gray-200 z-0"></div>
                 </div>
@@ -142,20 +143,16 @@
             <div id="project-access-banner" data-testid="project-access-banner"
                  class="hidden mb-4 rounded-xl px-4 py-3 text-sm"></div>
 
-            <!-- COMMENTED OUT: Redundant project title and edit bar 
-            <div class="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                    <p class="text-xs font-semibold uppercase text-gray-500">Current Project</p>
-                    <p id="project-title-chip" class="font-bold text-gray-900">ยังไม่ได้ตั้งชื่อโครงการ</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-3">
-                    <span id="draft-status" class="text-xs text-gray-500">draft ready</span>
-                    <button type="button" onclick="appState.goToStep(1)" class="px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:border-chula-light hover:text-chula-darker transition-colors">
-                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit project info
-                    </button>
-                </div>
+            <!-- Which project you are typing into. Complements the access banner above,
+                 which answers "what may I do here", not "what am I editing".
+                 The label is filled by appState.updateProjectHeader() on every keystroke
+                 in #m_projectName; updateStepUI() hides the whole bar on the report step,
+                 where the report header already carries the name. -->
+            <div class="bg-chula bg-opacity-5 border border-chula-light rounded-lg px-4 py-2 mb-6 flex items-center gap-2 text-sm" id="project-title-chip-bar" data-testid="project-title-chip-bar">
+                <i class="fa-regular fa-folder-open text-chula"></i>
+                <span class="text-gray-500">กำลังแก้ไขโครงการ:</span>
+                <span class="font-semibold text-chula" id="project-title-chip">ยังไม่ได้ตั้งชื่อโครงการ</span>
             </div>
-            -->
 
             <div class="bg-white rounded-2xl shadow-md p-6 sm:p-8 flex-grow min-w-0">
                 
