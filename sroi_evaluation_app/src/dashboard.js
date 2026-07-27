@@ -55,7 +55,7 @@ async function fetchProjects() {
                     <i class="fa-regular fa-folder-open"></i>
                 </div>
                 <h3 class="text-xl font-bold text-gray-800 mb-2">No projects found</h3>
-                <p class="text-gray-500">You haven't started any SROI assessments yet.</p>
+                <p class="text-gray-500">You haven't started any Triple S assessments yet.</p>
             </div>
         `;
         return;
