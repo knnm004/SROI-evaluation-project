@@ -1991,6 +1991,12 @@ export async function saveProjectData(currentProjectData) {
         const { data, error } = await supabase
             .from('projects')
             .update({
+                // Denormalised copy that the dashboard and admin lists render. Without
+                // it, renaming a project in step 1 saved the new name into
+                // assessment_data but left every card still showing the old one.
+                // updated_at / updated_by are deliberately NOT sent -- the
+                // projects_set_audit_fields trigger owns them and ignores client values.
+                project_name: document.getElementById('m_projectName')?.value || 'ไม่ได้ระบุชื่อโครงการ',
                 assessment_data: currentProjectData,
                 last_page_url: window.location.href
             })
