@@ -61,7 +61,7 @@ async function fetchProjects(email) {
                     <i class="fa-regular fa-folder-open"></i>
                 </div>
                 <h3 class="text-xl font-bold text-gray-800 mb-2">No projects found</h3>
-                <p class="text-gray-500">You haven't started any SROI assessments yet.</p>
+                <p class="text-gray-500">You haven't started any Triple S assessments yet.</p>
             </div>
         `;
         return;
@@ -84,7 +84,7 @@ async function fetchProjects(email) {
             <div class="flex-grow cursor-pointer" onclick="window.location.href='/index.html?id=${project.id}'">
                 <div class="flex items-start justify-between mb-3">
                     <div class="bg-chula bg-opacity-10 text-chula text-xs font-bold px-3 py-1 rounded-full">
-                        SROI Project
+                        Project
                     </div>
                 </div>
                 <h3 class="text-xl font-bold text-gray-900 mb-2 pr-8 group-hover:text-chula transition-colors line-clamp-2">
