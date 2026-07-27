@@ -2,9 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Served from public/fonts/, so the URLs are absolute from the site root and are
+   copied verbatim by Vite -- do not turn them into relative paths. Sarabun (from
+   the Google Fonts <link> in each page) stays as the fallback: ChulaCharasNew has
+   no Latin italic coverage worth relying on, and it is a .ttf, so a slow first
+   paint falls back rather than blocking. */
+@font-face {
+  font-family: 'ChulaCharasNew';
+  src: url('/fonts/ChulaCharasNewReg.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ChulaCharasNew';
+  src: url('/fonts/ChulaCharasNewBold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ChulaCharasNew';
+  src: url('/fonts/ChulaCharasNewIta.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ChulaCharasNew';
+  src: url('/fonts/ChulaCharasNewBoldIta.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 @layer base {
-  body { 
-    font-family: 'Sarabun', sans-serif; 
+  body {
+    font-family: 'ChulaCharasNew', 'Sarabun', sans-serif;
   }
 }
 
