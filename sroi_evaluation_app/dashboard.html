@@ -29,11 +29,18 @@
                 </div>
                 <!-- User Profile section -->
                 <div class="flex items-center gap-2">
+                    <!-- Unhidden by dashboard.js only for role = admin. Hiding it is a
+                         convenience, not a control: /admin.html checks for itself and
+                         RLS is what actually restricts the data. -->
+                    <a href="/admin.html" id="admin-link" data-testid="admin-link"
+                       class="hidden mr-3 text-sm font-semibold text-chula-darker hover:underline">
+                        <i class="fa-solid fa-shield-halved mr-1"></i>จัดการระบบ
+                    </a>
                     <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
                         <i class="fa-solid fa-user"></i>
                     </div>
                     <span class="text-sm font-medium" id="user-email-display">Loading...</span>
-                    <button id="logout-btn" class="ml-4 text-sm text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
+                    <button id="logout-btn" data-testid="logout-btn" class="ml-4 text-sm text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
                 </div>
             </div>
         </div>
@@ -70,7 +77,13 @@
     </footer>
 
     <!-- Scripts -->
-    <script type="module" src="/src/main.js"></script>
+    <!--
+      main.js is deliberately NOT loaded here. It bootstraps the six-step wizard,
+      whose elements (#view-landing, #sdg-container, #stepper-container, ...) exist
+      only in index.html, so appState.init() threw a TypeError on every dashboard
+      load. dashboard.js imports style.css itself, so the styling no longer depends
+      on main.js being present.
+    -->
     <script type="module" src="/src/dashboard.js"></script>
 </body>
 </html>

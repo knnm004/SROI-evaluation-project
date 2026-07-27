@@ -1,10 +1,20 @@
 import html2pdf from 'html2pdf.js';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase using Vite environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from './lib/supabaseClient.js';
+import { escapeHTML, formatMoney, formatNumber, formatUpdatedMeta } from './lib/format.js';
+import { loadIdentity, signInWithGoogle, signInWithPassword, signOut } from './lib/session.js';
+import {
+    canEditProject,
+    canDeleteProject,
+    canManageMembers,
+    isOwner,
+    describeAccess
+} from './lib/permissions.js';
+import {
+    serialiseAssessment,
+    deserialiseAssessment,
+    normaliseSnapshot,
+    buildProjectPayload
+} from './lib/assessmentSnapshot.js';
 
 // Helper to scope draft keys per project ID so projects don't bleed into each other
 function getDraftKey() {
@@ -55,7 +65,257 @@ export const appState = {
     lastGeocodeAt: 0,
     saveTimer: null,
     autosaveAttached: false,
-    
+
+    // Who is signed in, the project row being viewed, and what they may do with it.
+    // Filled by applyProjectAccess(). These shape the UI only -- RLS enforces.
+    identity: null,
+    projectMeta: null,
+    projectAccess: {
+        canEdit: false,
+        canDelete: false,
+        canManageMembers: false,
+        isOwner: false
+    },
+
+    /**
+     * Work out what this user may do with this project.
+     *
+     * @param identity from loadIdentity()
+     * @param project  the row, or null for a project that has not been saved yet
+     */
+    applyProjectAccess(identity, project) {
+        this.identity = identity ?? this.identity;
+        this.projectMeta = project ?? null;
+
+        if (!project) {
+            // Unsaved project: the person creating it is its owner.
+            this.projectAccess = {
+                canEdit: !!this.identity,
+                canDelete: false,
+                canManageMembers: false,
+                isOwner: true
+            };
+        } else {
+            this.projectAccess = {
+                canEdit: canEditProject(this.identity, project),
+                canDelete: canDeleteProject(this.identity, project),
+                canManageMembers: canManageMembers(this.identity, project),
+                isOwner: isOwner(this.identity, project)
+            };
+        }
+
+        // Permission may only ever TIGHTEN this flag, never loosen it.
+        if (!this.projectAccess.canEdit) this.isViewMode = true;
+
+        this.renderAccessBanner();
+        this.renderMemberPanel();
+    },
+
+    canEdit() {
+        return this.projectAccess.canEdit;
+    },
+
+    // ---- Researchers on this project -------------------------------------------
+
+    /** The current project's uuid, or null for one that has not been saved yet. */
+    getProjectId() {
+        return new URLSearchParams(window.location.search).get('id');
+    },
+
+    renderMemberPanel() {
+        const panel = document.getElementById('member-panel');
+        if (!panel) return;
+
+        // Only the owner and admins manage the team. Everyone else never sees it.
+        if (!this.projectAccess.canManageMembers) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        const projectId = this.getProjectId();
+        const input = document.getElementById('member-email-input');
+        const addBtn = document.getElementById('member-add-btn');
+        const locked = document.getElementById('member-locked');
+
+        // You cannot attach researchers to a project that has no row yet.
+        const unsaved = !projectId;
+        if (input) input.disabled = unsaved;
+        if (addBtn) addBtn.disabled = unsaved;
+        locked?.classList.toggle('hidden', !unsaved);
+
+        const members = this.projectMeta?.project_members ?? [];
+        const list = document.getElementById('member-list');
+        const count = document.getElementById('member-count');
+
+        if (count) {
+            count.textContent = members.length
+                ? `${members.length} คน`
+                : 'ยังไม่มีผู้ร่วมวิจัย';
+        }
+
+        if (!list) return;
+
+        if (members.length === 0) {
+            list.innerHTML = `<span class="text-xs text-gray-400">${
+                unsaved ? '' : 'เฉพาะคุณเท่านั้นที่เข้าถึงโครงการนี้'
+            }</span>`;
+            return;
+        }
+
+        // Chips hold other people's addresses, so everything is escaped.
+        list.innerHTML = members.map(member => {
+            const email = String(member.member_email ?? '');
+            const pending = !member.user_id;
+            return `
+                <span class="inline-flex items-center gap-2 bg-white border ${
+                    pending ? 'border-yellow-300' : 'border-gray-200'
+                } rounded-full pl-3 pr-1 py-1 text-xs" data-testid="member-chip">
+                    <span class="font-medium text-gray-700">${escapeHTML(email)}</span>
+                    ${pending ? '<span class="text-yellow-600">(รอเข้าสู่ระบบ)</span>' : ''}
+                    <button type="button" title="นำออกจากโครงการ"
+                            data-testid="member-remove-btn"
+                            onclick="appState.removeProjectMember('${escapeHTML(email).replaceAll("'", '&#039;')}')"
+                            class="w-5 h-5 flex items-center justify-center rounded-full text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </span>`;
+        }).join('');
+    },
+
+    showMemberFeedback(message, kind = 'ok') {
+        const el = document.getElementById('member-feedback');
+        if (!el) return;
+        el.textContent = message;
+        el.className = `text-xs mt-2 ${kind === 'error' ? 'text-red-600' : 'text-green-700'}`;
+        el.classList.remove('hidden');
+    },
+
+    async addProjectMember() {
+        if (!this.projectAccess.canManageMembers) return;
+
+        const projectId = this.getProjectId();
+        const input = document.getElementById('member-email-input');
+        if (!projectId || !input) return;
+
+        const email = input.value.trim().toLowerCase();
+
+        // Cheap local checks first, so obvious mistakes cost no round trip.
+        if (!email || !input.checkValidity()) {
+            this.showMemberFeedback('รูปแบบอีเมลไม่ถูกต้อง (Invalid email address)', 'error');
+            return;
+        }
+        if (email === this.identity?.email) {
+            this.showMemberFeedback('คุณเป็นเจ้าของโครงการนี้อยู่แล้ว (You already own this project)', 'error');
+            return;
+        }
+        if ((this.projectMeta?.project_members ?? []).some(
+            m => String(m.member_email ?? '').toLowerCase() === email)) {
+            this.showMemberFeedback('อีเมลนี้เป็นผู้ร่วมวิจัยอยู่แล้ว (Already a researcher on this project)', 'error');
+            return;
+        }
+
+        // An RPC, not a plain insert: the browser has no access to the accounts list,
+        // so resolving an email to a user id has to happen server-side. See
+        // add_project_researcher in supabase/migrations/0005_rls_v2.sql.
+        const { data, error } = await supabase.rpc('add_project_researcher', {
+            p_project_id: projectId,
+            p_email: email
+        });
+
+        if (error) {
+            console.error('Could not add researcher:', error);
+            this.showMemberFeedback('เพิ่มผู้ร่วมวิจัยไม่สำเร็จ (Could not add researcher)', 'error');
+            return;
+        }
+
+        const status = data?.status;
+        const messages = {
+            added:    `เพิ่ม ${email} เป็นผู้ร่วมวิจัยแล้ว`,
+            invited:  `${email} ยังไม่มีบัญชี — ระบบจะเพิ่มให้อัตโนมัติเมื่อเข้าสู่ระบบครั้งแรก`,
+            is_owner: 'อีเมลนี้เป็นเจ้าของโครงการอยู่แล้ว',
+            already:  'อีเมลนี้เป็นผู้ร่วมวิจัยอยู่แล้ว'
+        };
+        this.showMemberFeedback(
+            messages[status] ?? 'ดำเนินการเรียบร้อย',
+            status === 'added' || status === 'invited' ? 'ok' : 'error'
+        );
+
+        if (status === 'added' || status === 'invited') {
+            input.value = '';
+            await this.refreshProjectMembers();
+        }
+    },
+
+    async removeProjectMember(email) {
+        if (!this.projectAccess.canManageMembers) return;
+
+        const projectId = this.getProjectId();
+        if (!projectId || !email) return;
+
+        if (!confirm(`นำ ${email} ออกจากโครงการนี้?\n(Remove this researcher from the project?)`)) return;
+
+        const { data, error } = await supabase.rpc('remove_project_researcher', {
+            p_project_id: projectId,
+            p_email: email
+        });
+
+        if (error) {
+            console.error('Could not remove researcher:', error);
+            this.showMemberFeedback('นำออกไม่สำเร็จ (Could not remove researcher)', 'error');
+            return;
+        }
+
+        this.showMemberFeedback(
+            data?.status === 'removed' ? `นำ ${email} ออกแล้ว` : 'ไม่พบผู้ร่วมวิจัยรายนี้',
+            data?.status === 'removed' ? 'ok' : 'error'
+        );
+        await this.refreshProjectMembers();
+    },
+
+    /** Re-read the team from the database rather than trusting local edits. */
+    async refreshProjectMembers() {
+        const projectId = this.getProjectId();
+        if (!projectId || !this.projectMeta) return;
+
+        const { data, error } = await supabase
+            .from('project_members')
+            .select('user_id, member_email, added_at')
+            .eq('project_id', projectId);
+
+        if (error) {
+            console.error('Could not reload researchers:', error);
+            return;
+        }
+
+        this.projectMeta = { ...this.projectMeta, project_members: data ?? [] };
+        this.renderMemberPanel();
+    },
+
+    renderAccessBanner() {
+        const el = document.getElementById('project-access-banner');
+        if (!el) return;
+
+        if (!this.projectMeta || !this.identity) {
+            el.classList.add('hidden');
+            return;
+        }
+
+        const { canEdit } = this.projectAccess;
+        const role = describeAccess(this.identity, this.projectMeta);
+        const meta = formatUpdatedMeta(this.projectMeta);
+
+        el.className = `mb-4 rounded-xl px-4 py-3 text-sm flex flex-wrap items-center gap-x-3 gap-y-1 ${
+            canEdit
+                ? 'bg-blue-50 border border-blue-100 text-blue-800'
+                : 'bg-gray-50 border border-gray-200 text-gray-600'
+        }`;
+        el.innerHTML =
+            `<span class="font-bold"><i class="fa-solid fa-user-shield mr-2"></i>${escapeHTML(role)}</span>` +
+            (meta ? `<span class="text-xs opacity-80">${escapeHTML(meta)}</span>` : '');
+        el.classList.remove('hidden');
+    },
+
     init() {
         this.sroiRows = [this.createSROIRow()];
         this.renderSDGs();
@@ -79,39 +339,78 @@ export const appState = {
     },
 
     async login() {
-        console.log("Attempting to log in with Chula Google OAuth...");
-
-        const { data, error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                queryParams: {
-                    hd: 'student.chula.ac.th',
-                    prompt: 'select_account' // Forces Google account chooser to prevent auto-login
-                },
-                redirectTo: `${window.location.origin}/dashboard.html`
-            }
-        });
-
-        if (error) {
+        try {
+            await signInWithGoogle();
+        } catch (error) {
             console.error("Login failed:", error);
             alert("เกิดข้อผิดพลาดในการเข้าสู่ระบบ (Login error occurred)");
-            return;
         }
     },
 
-    async logout() {
-        try {
-            await supabase.auth.signOut();
-        } catch (error) {
-            console.error("Error signing out:", error);
+    /** Member sign-in (สมาชิก/บุคคลทั่วไป). Wired to the #view-login form. */
+    async loginWithPassword(event) {
+        event?.preventDefault();
+
+        const emailEl = document.getElementById('login-email');
+        const passwordEl = document.getElementById('login-password');
+        const submit = document.getElementById('login-submit');
+        if (!emailEl || !passwordEl || !submit) return;
+
+        const email = emailEl.value.trim();
+        const password = passwordEl.value; // never trimmed, never logged
+
+        if (!email || !password) {
+            this.showLoginError('กรอกอีเมลและรหัสผ่านให้ครบ (Enter both email and password)');
+            return;
+        }
+        if (!emailEl.checkValidity()) {
+            this.showLoginError('รูปแบบอีเมลไม่ถูกต้อง (Invalid email format)');
+            return;
         }
 
-        // Wipe all project draft keys from localStorage so data doesn't carry over
-        Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('sroi-evaluation-draft')) {
-                localStorage.removeItem(key);
+        this.hideLoginError();
+        const originalLabel = submit.innerHTML;
+        submit.disabled = true;
+        submit.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังเข้าสู่ระบบ...';
+
+        try {
+            const result = await signInWithPassword(email, password);
+            if (!result.ok) {
+                this.showLoginError(result.message);
+                return;
             }
-        });
+            passwordEl.value = ''; // don't leave the credential sitting in the DOM
+            window.location.assign('/dashboard.html');
+        } finally {
+            submit.disabled = false;
+            submit.innerHTML = originalLabel;
+        }
+    },
+
+    showLoginError(message) {
+        const el = document.getElementById('login-error');
+        if (!el) return;
+        el.textContent = message; // textContent, not innerHTML
+        el.classList.remove('hidden');
+    },
+
+    hideLoginError() {
+        document.getElementById('login-error')?.classList.add('hidden');
+    },
+
+    togglePasswordVisibility() {
+        const input = document.getElementById('login-password');
+        const icon = document.getElementById('login-password-toggle-icon');
+        if (!input) return;
+        const reveal = input.type === 'password';
+        input.type = reveal ? 'text' : 'password';
+        if (icon) icon.className = reveal ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye';
+    },
+
+    async logout() {
+        // signOut() clears this app's drafts and redirects. Pass redirectTo: null so
+        // the existing form-clearing below still runs first.
+        await signOut({ redirectTo: null });
 
         this.currentStep = 1;
         this.uploadedImage = null;
@@ -178,20 +477,31 @@ export const appState = {
     },
 
     goToStep(step) {
-        if (this.isViewMode && step !== this.totalSteps) {
+        // Someone who COULD edit is nudged to press "แก้ไขข้อมูล" first (unchanged).
+        // Someone with view-only access is free to browse every step -- the inputs are
+        // disabled anyway, and there is no Edit button for them to press.
+        if (this.isViewMode && this.canEdit() && step !== this.totalSteps) {
             alert("กรุณากดปุ่ม 'แก้ไขข้อมูล' ก่อนทำการแก้ไข (Please click the Edit button before modifying data)");
             return;
         }
-        
+
         this.currentStep = step;
         this.updateStepUI();
         window.scrollTo({top: 0, behavior: 'smooth'});
     },
 
     enableEditMode() {
+        // The only way out of read-only, and it is reachable from an inline onclick
+        // via window.appState, so it must check for itself. A blocked write would
+        // otherwise only fail later, at save time, after the user had retyped everything.
+        if (!this.canEdit()) {
+            alert('คุณมีสิทธิ์ดูรายงานเท่านั้น (You have view-only access to this project)');
+            return;
+        }
+
         this.isViewMode = false;
         this.currentStep = 1;
-        this.updateStepUI(); 
+        this.updateStepUI();
         
         setTimeout(() => {
             const firstInput = document.getElementById('m_projectName');
@@ -238,14 +548,22 @@ export const appState = {
             
             const btnSave = document.getElementById('btn-save-assessment');
             if (btnSave) {
-                if (this.isViewMode) {
+                btnSave.classList.remove('hidden');
+
+                if (this.isViewMode && !this.canEdit()) {
+                    // View-only: offer no edit affordance at all, rather than a button
+                    // that leads to a refusal.
+                    btnSave.classList.add('hidden');
+                } else if (this.isViewMode) {
                     btnSave.innerHTML = 'แก้ไขข้อมูล <i class="fa-solid fa-pen-to-square ml-2"></i>';
                     btnSave.className = 'bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
                     btnSave.setAttribute('onclick', 'appState.enableEditMode()');
+                    btnSave.setAttribute('data-testid', 'btn-edit-assessment');
                 } else {
                     btnSave.innerHTML = 'บันทึกผลประเมิน <i class="fa-solid fa-floppy-disk ml-2"></i>';
                     btnSave.className = 'bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
                     btnSave.setAttribute('onclick', 'appState.confirmAndSave()');
+                    btnSave.setAttribute('data-testid', 'btn-save-assessment');
                 }
             }
         } else {
@@ -261,7 +579,13 @@ export const appState = {
             }
         }
 
-        document.querySelectorAll('input, textarea, select').forEach(el => {
+        // Scoped to #view-app. This used to sweep the whole document, which now would
+        // also disable the login form and the researcher-management inputs.
+        // [data-readonly-exempt] opts a subtree out -- the member panel stays usable
+        // for an owner reading a saved report.
+        document.querySelectorAll('#view-app input, #view-app textarea, #view-app select').forEach(el => {
+            if (el.closest('[data-readonly-exempt]')) return;
+
             if (this.isViewMode) {
                 el.disabled = true;
                 el.readOnly = true;
@@ -296,17 +620,17 @@ export const appState = {
     },
 
     nextStep() {
-        if (this.currentStep < this.totalSteps) {
-            this.currentStep++;
-            this.updateStepUI();
-            window.scrollTo({top: 0, behavior: 'smooth'});
-            
-            const mockDataToSave = {
-                projectName: document.getElementById('m_projectName')?.value || "Untitled",
-                currentStep: this.currentStep
-            };
-            saveProjectData(mockDataToSave);
-        }
+        if (this.currentStep >= this.totalSteps) return;
+
+        this.currentStep++;
+        this.updateStepUI();
+        window.scrollTo({top: 0, behavior: 'smooth'});
+
+        // Local draft only. This used to call saveProjectData() with just
+        // { projectName, currentStep }, which overwrote the entire assessment_data
+        // column and destroyed every previously saved answer. Writes to the server
+        // are now only ever explicit, via confirmAndSave().
+        this.saveDraft();
     },
 
     prevStep() {
@@ -1317,19 +1641,28 @@ export const appState = {
         `;
     },
 
-    formatMoney(amount) {
-        return amount.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    },
-
-    formatNumber(amount) {
-        return amount.toLocaleString('th-TH', {maximumFractionDigits: 0});
-    },
+    // Re-exposed as methods so the ~25 existing `this.formatMoney(...)` /
+    // `this.escapeHTML(...)` calls in the template strings below keep working.
+    // The implementations live in lib/format.js, shared with dashboard.js.
+    formatMoney,
+    formatNumber,
 
     generateReport() {
         this.setText('r_projectName', this.getValue('m_projectName') || 'ไม่ได้ระบุชื่อโครงการ');
         this.setText('r_responsible', this.getValue('m_responsible'));
         this.setText('r_area', this.getValue('m_area'));
         this.setText('r_objective', this.getValue('m_objective'));
+
+        // Audit line and team list. Blank for an unsaved project, which has neither.
+        this.setText('r_updated_meta', formatUpdatedMeta(this.projectMeta));
+
+        const team = (this.projectMeta?.project_members ?? [])
+            .map(member => member.member_email)
+            .filter(Boolean);
+        this.setText(
+            'r_team',
+            team.length ? `ผู้ร่วมวิจัย: ${team.join(', ')}` : ''
+        );
 
         const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
         const sdgContainer = document.getElementById('r_sdgs');
@@ -1458,28 +1791,6 @@ export const appState = {
         });
     },
 
-    collectDraft() {
-        const fields = {};
-        document.querySelectorAll('input[id], textarea[id], select[id]').forEach(element => {
-            if (element.type === 'file' || element.type === 'checkbox' || element.dataset.sroiRow) return;
-            fields[element.id] = element.value;
-        });
-
-        const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
-        const sdgReasons = {};
-        document.querySelectorAll('.sdg-reason').forEach(note => {
-            sdgReasons[note.dataset.sdgId] = note.value;
-        });
-
-        return {
-            fields,
-            selectedSDGs,
-            sdgReasons,
-            sroiRows: this.sroiRows,
-            updatedAt: new Date().toISOString()
-        };
-    },
-
     scheduleSave() {
         window.clearTimeout(this.saveTimer);
         this.saveTimer = window.setTimeout(() => this.saveDraft(), 250);
@@ -1488,7 +1799,7 @@ export const appState = {
     },
 
     saveDraft() {
-        localStorage.setItem(getDraftKey(), JSON.stringify(this.collectDraft()));
+        localStorage.setItem(getDraftKey(), JSON.stringify(serialiseAssessment(this)));
         const status = document.getElementById('draft-status');
         if (status) status.innerText = 'บันทึก draft แล้ว';
     },
@@ -1498,27 +1809,7 @@ export const appState = {
         if (!rawDraft) return;
 
         try {
-            const draft = JSON.parse(rawDraft);
-            if (Array.isArray(draft.sroiRows) && draft.sroiRows.length > 0) {
-                this.sroiRows = draft.sroiRows.map(row => this.createSROIRow(row));
-                this.renderSROIRows();
-            }
-
-            Object.entries(draft.fields || {}).forEach(([id, value]) => {
-                const element = document.getElementById(id);
-                if (element && element.type !== 'file') element.value = value;
-            });
-
-            const selected = new Set(draft.selectedSDGs || []);
-            document.querySelectorAll('.sdg-checkbox').forEach(cb => {
-                cb.checked = selected.has(cb.value);
-            });
-            this.updateSelectedSDGs();
-            Object.entries(draft.sdgReasons || {}).forEach(([sdgId, value]) => {
-                const note = document.querySelector(`.sdg-reason[data-sdg-id="${sdgId}"]`);
-                if (note) note.value = value;
-            });
-            this.filterSDGs();
+            deserialiseAssessment(normaliseSnapshot(JSON.parse(rawDraft)), this);
         } catch (error) {
             console.warn('Could not load SROI draft', error);
         }
@@ -1559,32 +1850,9 @@ export const appState = {
             const originalText = btn ? btn.innerHTML : 'บันทึกผลประเมิน';
             if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
 
-            const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
-
-            const projectData = {
-                currentStep: this.currentStep,
-                sroiCalculations: this.calculateSROI(),
-                inputs: {
-                    m_projectName: document.getElementById('m_projectName')?.value || '',
-                    m_responsible: document.getElementById('m_responsible')?.value || '',
-                    m_area: document.getElementById('m_area')?.value || '',
-                    m_objective: document.getElementById('m_objective')?.value || '',
-                    sdgs: selectedSDGs,
-                    i_manpower: document.getElementById('i_manpower')?.value || '',
-                    i_budget: document.getElementById('i_budget')?.value || '',
-                    i_activities: document.getElementById('i_activities')?.value || '',
-                    i_output: document.getElementById('i_output')?.value || '',
-                    i_outcome: document.getElementById('i_outcome')?.value || '',
-                    i_impact: document.getElementById('i_impact')?.value || '',
-                    sv_quote: document.getElementById('sv_quote')?.value || '',
-                    c_outcome_value: document.getElementById('c_outcome_value')?.value || '',
-                    c_base_case: document.getElementById('c_base_case')?.value || '',
-                    c_investment: document.getElementById('c_investment')?.value || '',
-                    uploadedImage: this.uploadedImage 
-                }
-            };
-
-            const isSuccess = await saveProjectData(projectData);
+            // Captures every field, the raw SROI rows, the map/location data, and the
+            // SDG reasons -- all of which the old hand-written list silently dropped.
+            const isSuccess = await saveProjectData(buildProjectPayload(this));
 
             if (isSuccess) {
                 // Clear local storage draft for this specific project since it's now officially saved to Supabase
@@ -1601,14 +1869,7 @@ export const appState = {
         }
     },
 
-    escapeHTML(value) {
-        return String(value ?? '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-    }
+    escapeHTML
 };
 
 
@@ -1619,15 +1880,19 @@ export const appState = {
 document.addEventListener('DOMContentLoaded', async () => {
     appState.init();
 
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
-        console.log("No active session found. Showing landing page.");
-        appState.showView('view-landing'); 
+    // Unauthenticated visitors get the landing page rather than being redirected,
+    // so the two login buttons are reachable. redirectOnMissing: false is what makes
+    // that possible -- loadIdentity() would otherwise send them to '/'.
+    const identity = await loadIdentity({ redirectOnMissing: false });
+
+    if (!identity) {
+        console.log('No active session. Showing landing page.');
+        appState.showView('view-landing');
         return;
     }
 
-    const userEmail = session.user.email;
+    appState.identity = identity;
+
     const urlParams = new URLSearchParams(window.location.search);
     const projectId = urlParams.get('id');
     const isNew = urlParams.get('new');
@@ -1635,76 +1900,76 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (projectId || isNew) {
         appState.showView('view-app');
         appState.updateStepUI();
-        
-        document.getElementById('user-email-display').innerText = userEmail;
+
+        document.getElementById('user-email-display').innerText = identity.email;
         document.getElementById('nav-user').classList.remove('hidden');
 
         if (projectId) {
-            console.log(`Resuming project ID: ${projectId}`);
-            await loadExistingProject(projectId, userEmail);
+            await loadExistingProject(projectId, identity);
         } else {
-            console.log("Starting a new assessment");
-            initializeNewProject();
+            initializeNewProject(identity);
         }
     } else {
         window.location.href = '/dashboard.html';
     }
 });
 
-async function loadExistingProject(id, email) {
+async function loadExistingProject(id, identity) {
+    // No .eq('user_email', ...) any more -- that filter would hide projects shared
+    // with this user. RLS (0005) decides what is visible; a row we may not see
+    // simply comes back empty.
+    //
+    // maybeSingle() rather than single(): with collaboration, "exists but not yours"
+    // is a normal outcome and must not surface as a thrown error.
     const { data: project, error } = await supabase
         .from('projects')
-        .select('*')
+        .select('*, project_members(user_id, member_email, added_at)')
         .eq('id', id)
-        .eq('user_email', email)
-        .single(); 
+        .maybeSingle();
 
     if (error) {
         console.error("Error loading project:", error);
-        alert("Could not load your project data.");
+        alert("ไม่สามารถโหลดข้อมูลโครงการได้ (Could not load the project.)");
         return;
     }
 
-    if (project.assessment_data && project.assessment_data.inputs) {
-        const inputs = project.assessment_data.inputs;
-        const fieldsToRestore = [
-            'm_projectName', 'm_responsible', 'm_area', 'm_objective',
-            'i_manpower', 'i_budget', 'i_activities', 'i_output', 
-            'i_outcome', 'i_impact', 'sv_quote', 
-            'c_outcome_value', 'c_base_case', 'c_investment'
-        ];
+    if (!project) {
+        alert("ไม่พบโครงการนี้ หรือคุณไม่มีสิทธิ์เข้าถึง (Project not found, or you don't have access.)");
+        window.location.href = '/dashboard.html';
+        return;
+    }
 
-        fieldsToRestore.forEach(fieldId => {
-            const el = document.getElementById(fieldId);
-            if (el && inputs[fieldId] !== undefined) {
-                el.value = inputs[fieldId];
-            }
-        });
+    // normaliseSnapshot() upgrades the old { inputs, sroiCalculations } shape and
+    // recovers the raw SROI rows from sroiCalculations.rows[].row. Skipping it would
+    // load a legacy project with an empty SROI table, and the next save would then
+    // write zeros over the real stored results.
+    const snapshot = normaliseSnapshot(project.assessment_data);
 
-        if (inputs.sdgs && Array.isArray(inputs.sdgs)) {
-            document.querySelectorAll('.sdg-checkbox').forEach(cb => {
-                if (inputs.sdgs.includes(cb.value)) {
-                    cb.checked = true;
-                }
-            });
-        }
-
-        if (inputs.uploadedImage) {
-            appState.uploadedImage = inputs.uploadedImage;
-        }
+    if (snapshot) {
+        const { currentStep } = deserialiseAssessment(snapshot, appState);
+        appState.currentStep = Math.min(Math.max(currentStep, 1), appState.totalSteps);
     } else if (project.project_name) {
         const projectNameInput = document.getElementById('m_projectName');
         if (projectNameInput) projectNameInput.value = project.project_name;
+        appState.currentStep = 1;
     }
 
-    appState.currentStep = 6; 
-    appState.isViewMode = true; 
+    // Saved projects open read-only so an accidental keystroke cannot alter a
+    // finished assessment; "แก้ไขข้อมูล" now reveals a fully populated, genuinely
+    // editable form. applyProjectAccess() decides whether that button appears at all.
+    appState.isViewMode = true;
+    appState.applyProjectAccess(identity, project);
     appState.updateStepUI();
+    appState.calculateSROIPreview();
+    appState.updateSelectedSDGs();
+    appState.updateLiveSummary();
 }
 
-function initializeNewProject() {
+function initializeNewProject(identity) {
     appState.isViewMode = false;
     appState.currentStep = 1;
+    // A brand-new project has no row yet, so the creator is treated as its owner.
+    appState.applyProjectAccess(identity, null);
     appState.updateStepUI();
 }
 
@@ -1720,21 +1985,31 @@ export async function saveProjectData(currentProjectData) {
     }
 
     if (projectId) {
-        const { error } = await supabase
+        // Scope by owner as well as id. RLS is the real enforcement (see
+        // supabase/migrations/0001_projects_rls.sql); this filter makes the intent
+        // explicit and turns a blocked write into an empty result we can report.
+        const { data, error } = await supabase
             .from('projects')
-            .update({ 
+            .update({
                 assessment_data: currentProjectData,
                 last_page_url: window.location.href
             })
-            .eq('id', projectId);
-            
+            .eq('id', projectId)
+            .eq('user_email', session.user.email)
+            .select();
+
         if (error) {
             console.error("Update failed:", error);
             return false;
-        } else {
-            console.log("Project successfully updated!");
-            return true; 
         }
+
+        if (!data || data.length === 0) {
+            console.error("Update affected no rows: project missing or not owned by this user.");
+            return false;
+        }
+
+        console.log("Project successfully updated!");
+        return true;
     } else {
         const projectNameInput = document.getElementById('m_projectName');
         const finalProjectName = (projectNameInput && projectNameInput.value) ? projectNameInput.value : "ไม่ได้ระบุชื่อโครงการ";

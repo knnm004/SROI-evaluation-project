@@ -1,8 +1,12 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  // This is an explicit list, not a glob over *.html. A new page missing from here
+  // builds without error but ships UNSTYLED in production (dev looks fine, because
+  // dev does not purge). Add every new HTML page here as well as in vite.config.js.
   content: [
     "./index.html",
     "./dashboard.html",
+    "./admin.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {

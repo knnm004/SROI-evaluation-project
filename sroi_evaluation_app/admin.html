@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>จัดการระบบ - SROI Evaluation Platform</title>
+
+    <!-- Match fonts and icons from index.html -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col font-sans">
+
+    <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='/dashboard.html'">
+                    <div class="w-10 h-10 bg-chula rounded-full flex items-center justify-center text-white text-xl shadow-inner">
+                        <i class="fa-solid fa-chart-pie"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-gray-900 leading-tight">SROI Evaluation</h1>
+                        <p class="text-xs text-chula-dark font-medium">จัดการระบบ (Administration)</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="/dashboard.html" data-testid="admin-back-link"
+                       class="mr-3 text-sm font-semibold text-chula-darker hover:underline">
+                        <i class="fa-solid fa-arrow-left mr-1"></i>กลับหน้าโครงการ
+                    </a>
+                    <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <span class="text-sm font-medium" id="admin-email" data-testid="admin-email">Loading...</span>
+                    <button id="logout-btn" data-testid="logout-btn"
+                            class="ml-4 text-sm text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-900">โครงการทั้งหมดในระบบ</h2>
+                <p class="text-sm text-gray-500 mt-1">
+                    All projects across every user. <span id="admin-count" data-testid="admin-count"></span>
+                </p>
+            </div>
+            <div class="w-full md:w-80">
+                <label for="admin-search" class="sr-only">ค้นหา</label>
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input type="text" id="admin-search" data-testid="admin-search-input" autocomplete="off"
+                           placeholder="ค้นหาชื่อโครงการ หรือเจ้าของ"
+                           class="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none text-sm">
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <!-- Wide table: scrolls inside its own container so the page never scrolls sideways. -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm" data-testid="admin-table">
+                    <thead class="bg-gray-50 border-b border-gray-200 text-left">
+                        <tr>
+                            <th class="px-4 py-3 font-semibold text-gray-700">ชื่อโครงการ</th>
+                            <th class="px-4 py-3 font-semibold text-gray-700">เจ้าของ</th>
+                            <th class="px-4 py-3 font-semibold text-gray-700 text-center">ผู้ร่วมวิจัย</th>
+                            <th class="px-4 py-3 font-semibold text-gray-700 text-right">SROI</th>
+                            <th class="px-4 py-3 font-semibold text-gray-700">อัปเดตล่าสุด</th>
+                            <th class="px-4 py-3 font-semibold text-gray-700 text-right">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-tbody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+            <div id="admin-empty" class="hidden px-4 py-12 text-center text-gray-500" data-testid="admin-empty">
+                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mx-auto mb-4 text-2xl">
+                    <i class="fa-regular fa-folder-open"></i>
+                </div>
+                <p class="font-semibold text-gray-700">ไม่พบโครงการ</p>
+            </div>
+        </div>
+
+        <div class="mt-6 text-center">
+            <button id="admin-load-more" data-testid="admin-load-more"
+                    class="hidden bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded-lg shadow-sm transition-colors text-sm">
+                โหลดเพิ่ม <i class="fa-solid fa-chevron-down ml-1"></i>
+            </button>
+        </div>
+    </main>
+
+    <!--
+      Typed-name confirmation rather than a plain confirm(). An admin here is deleting
+      OTHER PEOPLE'S work, and a project cannot be recovered afterwards, so the action
+      should be deliberate rather than one misplaced click.
+    -->
+    <dialog id="delete-modal" data-testid="admin-delete-modal"
+            class="rounded-2xl p-0 w-full max-w-md backdrop:bg-black/40">
+        <div class="p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-2">
+                <i class="fa-solid fa-triangle-exclamation text-red-500 mr-2"></i>ลบโครงการอย่างถาวร
+            </h3>
+            <p class="text-sm text-gray-600 mb-1">
+                การลบไม่สามารถย้อนกลับได้ และจะลบข้อมูลของผู้ร่วมวิจัยทุกคนในโครงการนี้ด้วย
+            </p>
+            <p class="text-sm text-gray-600 mb-4">
+                พิมพ์ชื่อโครงการ <strong id="delete-expected-name" data-testid="admin-delete-expected" class="text-gray-900"></strong> เพื่อยืนยัน
+            </p>
+
+            <input type="text" id="delete-confirm-input" autocomplete="off"
+                   data-testid="admin-delete-confirm-input"
+                   class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-400 outline-none">
+            <p id="delete-error" role="alert" data-testid="admin-delete-error"
+               class="hidden text-sm text-red-600 mt-2"></p>
+
+            <div class="mt-5 flex justify-end gap-2">
+                <button type="button" id="delete-cancel" data-testid="admin-delete-cancel"
+                        class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium">
+                    ยกเลิก
+                </button>
+                <button type="button" id="delete-confirm-btn" disabled data-testid="admin-delete-confirm-btn"
+                        class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                    ลบถาวร
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <footer class="bg-white border-t border-gray-200 mt-auto py-4 text-center text-xs text-gray-500">
+        &copy; 2026 Chulalongkorn University. SROI Evaluation Prototype. All rights reserved.
+    </footer>
+
+    <script type="module" src="/src/admin.js"></script>
+</body>
+</html>
