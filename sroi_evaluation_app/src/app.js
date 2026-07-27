@@ -241,9 +241,14 @@ export const appState = {
             if (btnPrev) btnPrev.classList.remove('hidden');
         }
 
+        const projectTitleChip = document.getElementById('project-title-chip-bar');
+        if (projectTitleChip) {
+            projectTitleChip.classList.toggle('hidden', this.currentStep === this.totalSteps);
+        }
+
         if (this.currentStep === this.totalSteps) {
             if (formNav) formNav.classList.add('hidden');
-            this.generateReport(); 
+            this.generateReport();
         } else {
             if (formNav) formNav.classList.remove('hidden');
             
