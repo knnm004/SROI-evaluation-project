@@ -532,16 +532,12 @@
                                     <span id="r_val_invest" class="font-mono font-medium text-sm text-gray-900">0.00</span>
                                 </div>
                                 <div class="flex items-center justify-between px-4 py-2.5">
-                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-chart-line text-chula w-3 text-xs"></i>มูลค่าปัจจุบันของผลลัพธ์</span>
-                                    <span id="r_val_outcome" class="font-mono font-medium text-sm text-gray-900">0.00</span>
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-chart-line text-chula w-3 text-xs"></i>Total Present Value (PV)</span>
+                                    <span id="r_val_total_pv" class="font-mono font-medium text-sm text-gray-900">0.00</span>
                                 </div>
                                 <div class="flex items-center justify-between px-4 py-2.5">
-                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-minus text-red-400 w-3 text-xs"></i>หัก กรณีฐาน (Base Case)</span>
-                                    <span id="r_val_base" class="font-mono font-medium text-sm text-red-500">- 0.00</span>
-                                </div>
-                                <div class="flex items-center justify-between px-4 py-2.5">
-                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-3 text-xs"></i>มูลค่าผลลัพธ์สุทธิ</span>
-                                    <span id="r_val_net_outcome" class="font-mono font-medium text-sm text-green-600">0.00</span>
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-3 text-xs"></i>Net Present Value (NPV)</span>
+                                    <span id="r_val_npv" class="font-mono font-medium text-sm text-green-600">0.00</span>
                                 </div>
                             </div>
                         </div>
@@ -551,29 +547,28 @@
                                 <h4 class="font-bold text-gray-800 border-l-4 border-chula pl-2 mb-3 text-sm">ห่วงโซ่ผลกระทบ (Impact Pathway)</h4>
                                 <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-xs mb-4">
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ทรัพยากรบุคคล</strong>
-                                        <span id="r_manpower" class="text-gray-700">-</span>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Inputs</strong>
+                                        <span id="r_inputs" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">งบประมาณ</strong>
-                                        <span id="r_budget" class="text-gray-700">-</span>
-                                    </div>
-                                    
-                                    <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">กิจกรรม</strong>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Activities</strong>
                                         <span id="r_activities" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลผลิต</strong>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Outputs</strong>
                                         <span id="r_output" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลลัพธ์</strong>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Outcomes</strong>
                                         <span id="r_outcome" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลกระทบ</strong>
-                                        <span id="r_impact" class="text-gray-700">-</span>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Impacts</strong>
+                                        <span id="r_impact_economic" class="text-gray-700">-</span>
+                                    </div>
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">TOC Statement</strong>
+                                        <span id="r_toc_statement" class="text-gray-700">-</span>
                                     </div>
                                 </div>
                                 <div class="pt-3 border-t border-gray-100">

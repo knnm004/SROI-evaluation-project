@@ -1558,32 +1558,6 @@ export const appState = {
         };
     },
 
-    // Report-only: deadweight/displacement/attribution ARE the SROI base-case (counterfactual)
-    // deduction, already netted directly into calculateSROIRow()'s totalPV -- there is no
-    // separate "base case" figure left over. This recomputes the same per-row PV without those
-    // three factors (still applying drop-off, duration and discounting) purely so the report's
-    // "หัก กรณีฐาน (Base Case)" line can show what they actually removed. calculateSROIRow() and
-    // calculateSROI() are untouched -- the SROI Ratio keeps coming from those, unchanged.
-    calculateGrossOutcomePV(rows) {
-        return rows.reduce((sum, result) => {
-            const { row, quantity, monetaryValue, duration, discountRate, dropoff } = result;
-            const grossAnnualValue = quantity * monetaryValue;
-            const startOffset = row.outcomeStart === 'period-after' ? 1 : 0;
-            let grossPV = 0;
-
-            for (let calendarYear = 0; calendarYear < 6; calendarYear++) {
-                if (calendarYear < startOffset) continue;
-                const activeYear = calendarYear - startOffset;
-                if (activeYear >= duration) continue;
-
-                const droppedValue = grossAnnualValue * Math.pow(1 - dropoff, activeYear);
-                grossPV += droppedValue / Math.pow(1 + discountRate, calendarYear);
-            }
-
-            return sum + grossPV;
-        }, 0);
-    },
-
     calculateSROIPreview() {
         const calc = this.calculateSROI();
         const ratioEl = document.getElementById('preview_sroi_ratio');
@@ -1816,17 +1790,9 @@ export const appState = {
         this.setText('r_calc_quantity', this.formatNumber(calc.rows.reduce((sum, row) => sum + row.quantity, 0)));
         this.setText('r_calc_monetary', this.formatMoney(calc.rows.reduce((sum, row) => sum + row.monetaryValue, 0)));
         this.setText('r_calc_adjusted_annual', this.formatMoney(calc.adjustedAnnualValue));
-        // The report markup's "value" breakdown is invest -> outcome (gross PV) -> base
-        // case deduction -> net outcome, not the old invest/PV/NPV trio -- r_val_total_pv
-        // and r_val_npv no longer exist in index.html. "Base case" here IS the deadweight /
-        // displacement / attribution deduction (see calculateGrossOutcomePV above), so net
-        // outcome works out to calc.totalPV -- the same figure the SROI Ratio is built from.
-        const grossOutcomePV = this.calculateGrossOutcomePV(calc.rows);
-        const baseCaseDeduction = Math.max(0, grossOutcomePV - calc.totalPV);
+        this.setText('r_val_total_pv', this.formatMoney(calc.totalPV));
+        this.setText('r_val_npv', this.formatMoney(calc.netPresentValue));
         this.setText('r_val_invest', this.formatMoney(calc.investment));
-        this.setText('r_val_outcome', this.formatMoney(grossOutcomePV));
-        this.setText('r_val_base', `- ${this.formatMoney(baseCaseDeduction)}`);
-        this.setText('r_val_net_outcome', this.formatMoney(calc.totalPV));
         this.setText('r_calc_assumptions', `${calc.rows.length} SROI outcome row(s), Discount/adjustment applied per row`);
         this.setText('r_sroi_ratio', calc.sroiRatio.toFixed(2));
         this.setText('r_sroi_value', calc.sroiRatio.toFixed(2));
@@ -2121,8 +2087,31 @@ async function loadExistingProject(id, identity) {
 }
 
 function initializeNewProject(identity) {
-    appState.isViewMode = false;
+    // Every never-saved project shares the same draft key ('sroi-evaluation-draft-new',
+    // see getDraftKey()), and appState.init() -> loadDraft() already ran before we knew
+    // whether this load was "new" or "existing" -- so a genuinely new assessment can come
+    // up pre-filled (SDGs checked, etc.) with whatever a previous, unrelated, abandoned
+    // new project last autosaved. Wipe both the stored draft and the state/DOM it already
+    // populated so "new" always actually means new.
+    localStorage.removeItem('sroi-evaluation-draft-new');
+
     appState.currentStep = 1;
+    appState.uploadedImage = null;
+    appState.sroiRows = [appState.createSROIRow()];
+    appState.isViewMode = false;
+
+    document.querySelectorAll('input, textarea').forEach(el => {
+        // Checkbox/radio "value" is a fixed identifier (e.g. "SDG 2: ..."), not user
+        // text -- clearing it would permanently break lookups like generateReport()'s
+        // .sdg-checkbox:checked -> cb.value, even after the box is checked again.
+        if (el.type !== 'file' && el.type !== 'checkbox' && el.type !== 'radio') el.value = '';
+    });
+    document.querySelectorAll('select').forEach(el => { el.selectedIndex = 0; });
+    document.querySelectorAll('.sdg-checkbox').forEach(cb => { cb.checked = false; });
+
+    appState.renderSROIRows();
+    appState.updateSelectedSDGs();
+
     // A brand-new project has no row yet, so the creator is treated as its owner.
     appState.applyProjectAccess(identity, null);
     appState.updateStepUI();
