@@ -482,6 +482,13 @@ export const appState = {
     },
 
     goToStep(step) {
+        // While actively editing, step 6 (the finished report) is only reachable through
+        // the recheck-and-save flow, never by clicking the stepper directly -- otherwise
+        // unsaved changes could be "viewed" as a report without ever being persisted.
+        if (!this.isViewMode && step === this.totalSteps) {
+            return;
+        }
+
         // Someone who COULD edit is nudged to press "แก้ไขข้อมูล" first (unchanged).
         // Someone with view-only access is free to browse every step -- the inputs are
         // disabled anyway, and there is no Edit button for them to press.
@@ -2091,9 +2098,10 @@ export async function saveProjectData(currentProjectData) {
     }
 
     if (projectId) {
-        // Scope by owner as well as id. RLS is the real enforcement (see
-        // supabase/migrations/0001_projects_rls.sql); this filter makes the intent
-        // explicit and turns a blocked write into an empty result we can report.
+        // Access is enforced by RLS via owner_id / project_members (see
+        // supabase/migrations/0005_rls_v2.sql), not by user_email -- that column is only
+        // a denormalised fallback and does not track collaborators or ownership
+        // transfers. Filtering on it here would reject legitimate updates RLS allows.
         const { data, error } = await supabase
             .from('projects')
             .update({
@@ -2107,7 +2115,6 @@ export async function saveProjectData(currentProjectData) {
                 last_page_url: window.location.href
             })
             .eq('id', projectId)
-            .eq('user_email', session.user.email)
             .select();
 
         if (error) {
@@ -2116,7 +2123,7 @@ export async function saveProjectData(currentProjectData) {
         }
 
         if (!data || data.length === 0) {
-            console.error("Update affected no rows: project missing or not owned by this user.");
+            console.error("Update affected no rows: project missing or blocked by RLS.");
             return false;
         }
 
@@ -2128,13 +2135,16 @@ export async function saveProjectData(currentProjectData) {
 
         const { data, error } = await supabase
             .from('projects')
-            .insert([{ 
+            .insert([{
+                // owner_id is what RLS checks (supabase/migrations/0005_rls_v2.sql);
+                // user_email is kept only as a readable fallback, not for access control.
+                owner_id: session.user.id,
                 user_email: session.user.email,
-                project_name: finalProjectName, 
+                project_name: finalProjectName,
                 assessment_data: currentProjectData,
                 last_page_url: window.location.href
             }])
-            .select(); 
+            .select();
             
         if (error) {
             console.error("Insert failed:", error);
