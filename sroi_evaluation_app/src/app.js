@@ -1929,6 +1929,13 @@ export const appState = {
         const originalText = btn ? btn.innerHTML : 'บันทึกผลประเมิน';
         if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
 
+        // Saving from the modal finishes the assessment, so the persisted snapshot must
+        // say step 6 -- otherwise reopening the project from the dashboard lands back on
+        // step 5 (buildProjectPayload() below reads currentStep at call time).
+        if (fromModal) {
+            this.currentStep = this.totalSteps;
+        }
+
         // Read the draft key BEFORE saving. For a first save saveProjectData() calls
         // history.replaceState() to put ?id=<newId> in the URL, which changes what
         // getDraftKey() returns -- clearing it afterwards would delete a key that never
@@ -1950,8 +1957,9 @@ export const appState = {
 
         if (fromModal) {
             // Saving from step 5 is what produces the report, so land the user on it.
+            // currentStep was already bumped to totalSteps above, before the payload
+            // was built, so the persisted snapshot matches what's shown here.
             this.hideRecheckModal();
-            this.currentStep = this.totalSteps;
         }
 
         this.isViewMode = true;
