@@ -55,6 +55,12 @@ export const appState = {
     totalSteps: 6,
     uploadedImage: null,
     isViewMode: false,
+    // Has the user actually changed anything THIS session, as opposed to just having
+    // opened a project or clicked "Edit"? Drives whether goHome() bothers them with the
+    // "saved as a draft" confirm -- reset wherever a session starts clean (new project,
+    // opening/resuming an existing one, entering edit mode), set by scheduleSave()
+    // (every real field-level change goes through it).
+    isDirty: false,
     sroiRows: [],
     areaMap: null,
     areaMarker: null,
@@ -434,10 +440,12 @@ export const appState = {
     },
 
     goHome() {
-        // Only prompt when there is unsaved typing to lose. A saved project opens
-        // read-only, so warning about a draft there was just a click to dismiss --
-        // and it fired on every visit to a finished report.
-        if (this.currentView === 'view-app' && !this.isViewMode) {
+        // Only prompt when there is actually unsaved typing to report -- not just
+        // because the form is in an editable state. Clicking "แก้ไขข้อมูล" (or
+        // "New Assessment") and leaving without changing anything is not an edit,
+        // so isDirty (set only by scheduleSave(), i.e. a real field-level change)
+        // stays false and no confirm shows.
+        if (this.currentView === 'view-app' && !this.isViewMode && this.isDirty) {
             if (!confirm('ข้อมูลถูกบันทึกเป็น draft บนเครื่องนี้ ต้องการกลับสู่หน้าหลักหรือไม่?')) return;
         }
         window.location.href = '/dashboard.html';
@@ -517,8 +525,9 @@ export const appState = {
 
         this.isViewMode = false;
         this.currentStep = 1;
+        this.isDirty = false; // clicking Edit alone is not an edit -- goHome() checks this
         this.updateStepUI();
-        
+
         setTimeout(() => {
             const firstInput = document.getElementById('m_projectName');
             if (firstInput) {
@@ -1837,6 +1846,7 @@ export const appState = {
     },
 
     scheduleSave() {
+        this.isDirty = true;
         window.clearTimeout(this.saveTimer);
         this.saveTimer = window.setTimeout(() => this.saveDraft(), 250);
         const status = document.getElementById('draft-status');
