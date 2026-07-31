@@ -46,6 +46,12 @@
 }
 
 @layer components {
+  /* Only the step labels under the breadcrumb/stepper -- Noto Sans Mende Kikakui's
+     capital "I" and digit "1" are visually distinct, unlike the site's main fonts. */
+  .stepper-label {
+    font-family: 'Noto Sans Mende Kikakui', sans-serif;
+  }
+
   .form-panel {
     @apply bg-gray-50 p-4 rounded-xl border border-gray-200;
   }

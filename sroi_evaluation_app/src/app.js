@@ -478,7 +478,7 @@ export const appState = {
     renderStepper() {
         const container = document.getElementById('stepper-container').querySelector('.flex');
         let stepsHtml = '';
-        const stepNames = ["Metadata", "I1 SDGs", "I2/I3 Pathway", "S1 Evidence", "S2 SROI", "S3 Report"];
+        const stepNames = ["Metadata", "I-1 SDGs", "I-2/I-3 Pathway", "S-1 Evidence", "S-2 SROI", "S-3 Report"];
         
         for(let i=1; i<=this.totalSteps; i++) {
             stepsHtml += `
@@ -486,7 +486,7 @@ export const appState = {
                     <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm bg-white transition-colors duration-300 ${i===1 ? 'step-active' : 'step-inactive'}">
                         ${i}
                     </div>
-                    <span class="text-xs mt-2 font-medium ${i===1 ? 'text-chula' : 'text-gray-400'} hidden md:block text-center px-1">${stepNames[i-1]}</span>
+                    <span class="stepper-label text-xs mt-2 font-medium ${i===1 ? 'text-chula' : 'text-gray-400'} hidden md:block text-center px-1">${stepNames[i-1]}</span>
                 </div>
             `;
         }
@@ -544,13 +544,13 @@ export const appState = {
             
             if(i === this.currentStep) {
                 circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 step-active";
-                text.className = "text-xs mt-2 font-medium text-chula hidden md:block text-center px-1";
+                text.className = "stepper-label text-xs mt-2 font-medium text-chula hidden md:block text-center px-1";
             } else if (i < this.currentStep) {
                 circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 bg-chula-light border-chula-light text-white";
-                text.className = "text-xs mt-2 font-medium text-gray-600 hidden md:block text-center px-1";
+                text.className = "stepper-label text-xs mt-2 font-medium text-gray-600 hidden md:block text-center px-1";
             } else {
                 circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 step-inactive";
-                text.className = "text-xs mt-2 font-medium text-gray-400 hidden md:block text-center px-1";
+                text.className = "stepper-label text-xs mt-2 font-medium text-gray-400 hidden md:block text-center px-1";
             }
         }
 
