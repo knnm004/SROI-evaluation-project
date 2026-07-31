@@ -72,6 +72,48 @@ function setupNewAssessmentButton() {
     });
 }
 
+/**
+ * Opening a project whose id-scoped local draft (app.js's getDraftKey() ->
+ * 'sroi-evaluation-draft-<id>') holds unsaved edits offers a choice instead of
+ * silently discarding them (the old behaviour) or silently reviving them:
+ *   - "ไปต่อจากฉบับที่แก้ไขค้างไว้"   -> ?id=<id>&resumeDraft=1, keeps editing
+ *   - "ไปหน้าผลลัพธ์ ... ยกเลิก ..." -> ?id=<id>, discards the draft, shows the
+ *     last explicitly-saved (server) version, same as opening it normally
+ * No draft for this id -> opens straight through, exactly as before.
+ */
+function openProject(projectId) {
+    let hasDraft = false;
+    try {
+        const raw = localStorage.getItem(`sroi-evaluation-draft-${projectId}`);
+        hasDraft = raw ? hasMeaningfulContent(normaliseSnapshot(JSON.parse(raw))) : false;
+    } catch (error) {
+        console.warn('Could not read project draft', error);
+    }
+
+    if (!hasDraft) {
+        window.location.href = `/index.html?id=${projectId}`;
+        return;
+    }
+
+    const modal = document.getElementById('existing-draft-choice-modal');
+    if (!modal) {
+        window.location.href = `/index.html?id=${projectId}`;
+        return;
+    }
+
+    modal.classList.remove('hidden');
+
+    const resumeBtn = document.getElementById('existing-draft-resume');
+    const discardBtn = document.getElementById('existing-draft-discard');
+    const cancelBtn = document.getElementById('existing-draft-cancel');
+
+    // Re-bound on every open so each click targets the project that was actually
+    // clicked, not whichever project's listener happened to attach first.
+    resumeBtn.onclick = () => { window.location.href = `/index.html?id=${projectId}&resumeDraft=1`; };
+    discardBtn.onclick = () => { window.location.href = `/index.html?id=${projectId}`; };
+    cancelBtn.onclick = () => { modal.classList.add('hidden'); };
+}
+
 async function fetchProjects() {
     const container = document.getElementById('projects-container');
 
@@ -124,7 +166,7 @@ async function fetchProjects() {
         card.setAttribute('data-testid', 'project-card');
 
         card.innerHTML = `
-            <div class="flex-grow cursor-pointer" onclick="window.location.href='/index.html?id=${project.id}'">
+            <div class="flex-grow cursor-pointer project-open-trigger">
                 <div class="flex items-start justify-between mb-3 pr-8 gap-2 flex-wrap">
                     ${badge}
                     ${teamCount > 0
@@ -146,7 +188,7 @@ async function fetchProjects() {
                     : '<div class="mb-4"></div>'}
             </div>
 
-            <div class="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center cursor-pointer" onclick="window.location.href='/index.html?id=${project.id}'">
+            <div class="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center cursor-pointer project-open-trigger">
                 <span class="text-chula font-medium text-sm flex items-center">
                     ดูรายละเอียด <i class="fa-solid fa-arrow-right ml-2 text-xs transform group-hover:translate-x-1 transition-transform"></i>
                 </span>
@@ -159,6 +201,13 @@ async function fetchProjects() {
                    </button>`
                 : ''}
         `;
+
+        // Every project's local draft lives under its own id-scoped key (matches
+        // app.js's getDraftKey()), so this check can never see another project's --
+        // or the never-saved "new assessment" draft's -- unsaved edits.
+        card.querySelectorAll('.project-open-trigger').forEach(trigger => {
+            trigger.addEventListener('click', () => openProject(project.id));
+        });
 
         // Only owners and admins get a delete button, so this may legitimately be absent.
         const deleteBtn = card.querySelector('.delete-btn');

@@ -2002,6 +2002,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // draft" or by the plain new-assessment link when there was no draft to ask
     // about) -- see index.html?new=true[&fresh=1] and dashboard.js.
     const isFresh = urlParams.get('fresh') === '1';
+    // Set only by the dashboard's per-project "continue unsaved edit" choice -- see
+    // index.html?id=...&resumeDraft=1 and dashboard.js.
+    const resumeDraft = urlParams.get('resumeDraft') === '1';
 
     if (projectId || isNew) {
         appState.showView('view-app');
@@ -2011,7 +2014,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('nav-user').classList.remove('hidden');
 
         if (projectId) {
-            await loadExistingProject(projectId, identity);
+            await loadExistingProject(projectId, identity, resumeDraft);
         } else {
             initializeNewProject(identity, isFresh);
         }
@@ -2020,7 +2023,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-async function loadExistingProject(id, identity) {
+/**
+ * @param id
+ * @param identity
+ * @param resumeDraft - true only when the dashboard's per-project prompt (see
+ *   dashboard.js) offered "continue unsaved edit" over a local draft for THIS
+ *   project's id (getDraftKey() -> 'sroi-evaluation-draft-<id>') and the user picked
+ *   it. appState.init() -> loadDraft() already restored that draft's fields, SROI
+ *   rows, and currentStep into the form before this function runs -- so resuming
+ *   means leaving all of that alone and only pulling permissions/team data from the
+ *   server row. The normal path (false) discards any local draft for this id and
+ *   shows the server's last explicitly-saved version, as before.
+ */
+async function loadExistingProject(id, identity, resumeDraft) {
     // No .eq('user_email', ...) any more -- that filter would hide projects shared
     // with this user. RLS (0005) decides what is visible; a row we may not see
     // simply comes back empty.
@@ -2045,25 +2060,37 @@ async function loadExistingProject(id, identity) {
         return;
     }
 
-    // normaliseSnapshot() upgrades the old { inputs, sroiCalculations } shape and
-    // recovers the raw SROI rows from sroiCalculations.rows[].row. Skipping it would
-    // load a legacy project with an empty SROI table, and the next save would then
-    // write zeros over the real stored results.
-    const snapshot = normaliseSnapshot(project.assessment_data);
+    if (resumeDraft) {
+        // Keep editing exactly where the local draft left off -- form fields, SROI
+        // rows, and currentStep were already restored by loadDraft() during init().
+        appState.isViewMode = false;
+    } else {
+        // Discarding whatever local draft exists for this id (there may be none,
+        // which is a harmless no-op) before loading the server's version, so a stale
+        // draft can't reappear the next time this project is opened normally.
+        localStorage.removeItem(getDraftKey());
 
-    if (snapshot) {
-        const { currentStep } = deserialiseAssessment(snapshot, appState);
-        appState.currentStep = Math.min(Math.max(currentStep, 1), appState.totalSteps);
-    } else if (project.project_name) {
-        const projectNameInput = document.getElementById('m_projectName');
-        if (projectNameInput) projectNameInput.value = project.project_name;
-        appState.currentStep = 1;
+        // normaliseSnapshot() upgrades the old { inputs, sroiCalculations } shape and
+        // recovers the raw SROI rows from sroiCalculations.rows[].row. Skipping it would
+        // load a legacy project with an empty SROI table, and the next save would then
+        // write zeros over the real stored results.
+        const snapshot = normaliseSnapshot(project.assessment_data);
+
+        if (snapshot) {
+            const { currentStep } = deserialiseAssessment(snapshot, appState);
+            appState.currentStep = Math.min(Math.max(currentStep, 1), appState.totalSteps);
+        } else if (project.project_name) {
+            const projectNameInput = document.getElementById('m_projectName');
+            if (projectNameInput) projectNameInput.value = project.project_name;
+            appState.currentStep = 1;
+        }
+
+        // Saved projects open read-only so an accidental keystroke cannot alter a
+        // finished assessment; "แก้ไขข้อมูล" now reveals a fully populated, genuinely
+        // editable form. applyProjectAccess() decides whether that button appears at all.
+        appState.isViewMode = true;
     }
 
-    // Saved projects open read-only so an accidental keystroke cannot alter a
-    // finished assessment; "แก้ไขข้อมูล" now reveals a fully populated, genuinely
-    // editable form. applyProjectAccess() decides whether that button appears at all.
-    appState.isViewMode = true;
     appState.applyProjectAccess(identity, project);
     appState.updateStepUI();
     appState.calculateSROIPreview();
