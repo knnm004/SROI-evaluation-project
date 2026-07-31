@@ -724,6 +724,19 @@ export const appState = {
         });
     },
 
+    // Landing page's collapsed "เกี่ยวกับระบบนี้" panel: one language block visible
+    // at a time instead of both full Thai and English copies stacked together.
+    showIntroLang(lang) {
+        document.querySelectorAll('[data-intro-lang]').forEach(panel => {
+            panel.classList.toggle('hidden', panel.dataset.introLang !== lang);
+        });
+        document.querySelectorAll('[data-intro-tab]').forEach(tab => {
+            const active = tab.dataset.introTab === lang;
+            tab.classList.toggle('framework-tab-active', active);
+            tab.classList.toggle('framework-tab-idle', !active);
+        });
+    },
+
     initAreaMap() {
         const mapEl = document.getElementById('area-map');
         if (!mapEl) return;

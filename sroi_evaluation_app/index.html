@@ -59,6 +59,44 @@
             <p class="text-sm text-gray-400 mt-4">
                 บุคลากรและนิสิตใช้บัญชีจุฬาฯ &middot; สมาชิกภายนอกใช้อีเมลและรหัสผ่านที่ผู้ดูแลระบบออกให้
             </p>
+
+            <!--
+              Collapsed by default so the login buttons stay the first, uncluttered
+              thing anyone sees. The full bilingual introduction (client-provided
+              copy, do not edit the wording) lives here instead of stacked below the
+              buttons -- reading it is opt-in via <summary>, and a language tab
+              switch (reusing .framework-tab from the report step) shows one
+              language block at a time instead of doubling the reading length.
+            -->
+            <details class="mt-8 text-left max-w-2xl mx-auto group" id="intro-details" data-testid="landing-intro">
+                <summary class="cursor-pointer list-none flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-chula-dark transition-colors">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>เกี่ยวกับระบบนี้ (About Chula Triple S System)</span>
+                    <i class="fa-solid fa-chevron-down text-xs transition-transform group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-4 bg-white border border-gray-200 rounded-xl p-5 sm:p-6 shadow-sm">
+                    <div class="flex gap-2 mb-4">
+                        <button type="button" onclick="appState.showIntroLang('th')" data-intro-tab="th"
+                                data-testid="intro-tab-th" class="framework-tab framework-tab-active">ภาษาไทย</button>
+                        <button type="button" onclick="appState.showIntroLang('en')" data-intro-tab="en"
+                                data-testid="intro-tab-en" class="framework-tab framework-tab-idle">English</button>
+                    </div>
+
+                    <div data-intro-lang="th" class="text-sm text-gray-600 leading-relaxed space-y-3">
+                        <p>Chula Triple S System คือระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย ออกแบบสำหรับผู้บริหาร นักวิชาการ และนักวิจัย เพื่อช่วยวิเคราะห์เส้นทางการสร้างผลกระทบ กำหนดผลลัพธ์และตัวชี้วัด ติดตามการเปลี่ยนแปลงที่เกิดขึ้น และเชื่อมโยงผลงานกับเป้าหมายการพัฒนาที่ยั่งยืน (SDGs)</p>
+                        <p>ระบบช่วยเปลี่ยนข้อมูลจากการดำเนินโครงการให้เป็นหลักฐานเชิงประจักษ์สำหรับพัฒนางาน ขยายผล และนำองค์ความรู้จากการวิจัยและนวัตกรรมไปแก้ไขปัญหาสังคมอย่างยั่งยืน ขณะเดียวกันผู้บริหารสามารถใช้ข้อมูลประกอบการกำหนดนโยบาย จัดสรรทรัพยากร และตัดสินใจเชิงยุทธศาสตร์ เพื่อยกระดับผลกระทบทางสังคมของมหาวิทยาลัยให้เกิดคุณค่าอย่างเป็นรูปธรรม</p>
+                        <p>ผู้บริหาร นักวิชาการ นักวิจัย และหน่วยงานที่สนใจแลกเปลี่ยนองค์ความรู้ เรียนรู้แนวทางการประเมินผลกระทบทางสังคม หรือนำ Chula Triple S System ไปประยุกต์ใช้และต่อยอด เพื่อยกระดับคุณค่าจากงานวิจัย นวัตกรรม และบริการวิชาการ</p>
+                        <p>ติดต่อเพื่อขอข้อมูลเพิ่มเติมได้ที่ [email]</p>
+                    </div>
+
+                    <div data-intro-lang="en" class="hidden text-sm text-gray-600 leading-relaxed space-y-3">
+                        <p>Chula Triple S System is an integrated platform for assessing and managing the social impact of research, innovation, and academic service projects at Chulalongkorn University. Designed for university leaders, academics, and researchers, the system supports impact pathway analysis, outcome and indicator development, change tracking, and alignment with the Sustainable Development Goals (SDGs).</p>
+                        <p>The system transforms project data into actionable evidence for improving performance, scaling successful initiatives, and applying research and innovation to sustainable social development. It also enables university leaders to make evidence-informed decisions on policy, resource allocation, and institutional strategy strengthening the university's capacity to create meaningful and measurable social impact.</p>
+                        <p>University leaders, academics, researchers, and organisations interested in exchanging and expanding knowledge, learning about social impact assessment, or applying and further developing the Chula Triple S System to enhance the value and impact of research, innovation, and academic services are welcome to</p>
+                        <p>Contact us for further information at [email].</p>
+                    </div>
+                </div>
+            </details>
         </div>
         <div id="view-login" class="hidden w-full max-w-md fade-in bg-white rounded-2xl shadow-xl overflow-hidden">
             <!--<div class="bg-chula p-6 text-center text-white">
