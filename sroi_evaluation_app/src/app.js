@@ -88,11 +88,14 @@ export const appState = {
         this.projectMeta = project ?? null;
 
         if (!project) {
-            // Unsaved project: the person creating it is its owner.
+            // Unsaved project: the person creating it is its owner, so they can see
+            // (and, once the project is saved, use) the researcher panel. renderMemberPanel()
+            // already disables the add-input and shows "save first" via #member-locked
+            // while there's no project id yet.
             this.projectAccess = {
                 canEdit: !!this.identity,
                 canDelete: false,
-                canManageMembers: false,
+                canManageMembers: !!this.identity,
                 isOwner: true
             };
         } else {
@@ -565,27 +568,15 @@ export const appState = {
 
         if (this.currentStep === this.totalSteps) {
             formNav.classList.add('hidden');
-            this.generateReport(); 
-            
-            const btnSave = document.getElementById('btn-save-assessment');
-            if (btnSave) {
-                btnSave.classList.remove('hidden');
+            this.generateReport();
 
-                if (this.isViewMode && !this.canEdit()) {
-                    // View-only: offer no edit affordance at all, rather than a button
-                    // that leads to a refusal.
-                    btnSave.classList.add('hidden');
-                } else if (this.isViewMode) {
-                    btnSave.innerHTML = 'แก้ไขข้อมูล <i class="fa-solid fa-pen-to-square ml-2"></i>';
-                    btnSave.className = 'bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
-                    btnSave.setAttribute('onclick', 'appState.enableEditMode()');
-                    btnSave.setAttribute('data-testid', 'btn-edit-assessment');
-                } else {
-                    btnSave.innerHTML = 'บันทึกผลประเมิน <i class="fa-solid fa-floppy-disk ml-2"></i>';
-                    btnSave.className = 'bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
-                    btnSave.setAttribute('onclick', 'appState.confirmAndSave()');
-                    btnSave.setAttribute('data-testid', 'btn-save-assessment');
-                }
+            // Step 6 is only ever reached after confirmAndSave() already ran from the
+            // step-5 recheck modal -- there is no save button here (see index.html).
+            // "แก้ไขข้อมูล" shows only for someone who may actually edit; a view-only
+            // visitor gets no edit affordance at all rather than a button that refuses.
+            const btnEdit = document.getElementById('btn-edit-assessment');
+            if (btnEdit) {
+                btnEdit.classList.toggle('hidden', !(this.isViewMode && this.canEdit()));
             }
         } else {
             formNav.classList.remove('hidden');
@@ -1914,27 +1905,19 @@ export const appState = {
         });
     },
 
+    // The step-5 recheck modal's ยืนยัน button is the only entry point -- it shows the
+    // whole report before committing, which already IS the confirmation step, so this
+    // needs no confirm() of its own. There is deliberately no save button on step 6;
+    // see the comment in index.html above #step-6.
     async confirmAndSave() {
-        // Two entry points. The report-step button needs a confirm() of its own; the
-        // recheck modal's ยืนยัน button does not, because the modal -- which shows the
-        // whole report -- already IS the confirmation step.
-        const modal = document.getElementById('recheck-modal');
-        const fromModal = !!modal && !modal.classList.contains('hidden');
-
-        if (!fromModal && !confirm('คุณต้องการบันทึกผลการประเมินนี้ใช่หรือไม่? (Do you want to save this assessment?)')) {
-            return;
-        }
-
-        const btn = document.getElementById(fromModal ? 'modal-btn-confirm' : 'btn-save-assessment');
-        const originalText = btn ? btn.innerHTML : 'บันทึกผลประเมิน';
+        const btn = document.getElementById('modal-btn-confirm');
+        const originalText = btn ? btn.innerHTML : 'ยืนยัน';
         if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
 
         // Saving from the modal finishes the assessment, so the persisted snapshot must
         // say step 6 -- otherwise reopening the project from the dashboard lands back on
         // step 5 (buildProjectPayload() below reads currentStep at call time).
-        if (fromModal) {
-            this.currentStep = this.totalSteps;
-        }
+        this.currentStep = this.totalSteps;
 
         // Read the draft key BEFORE saving. For a first save saveProjectData() calls
         // history.replaceState() to put ?id=<newId> in the URL, which changes what
@@ -1955,20 +1938,16 @@ export const appState = {
 
         localStorage.removeItem(draftKeyToClear);
 
-        if (fromModal) {
-            // Saving from step 5 is what produces the report, so land the user on it.
-            // currentStep was already bumped to totalSteps above, before the payload
-            // was built, so the persisted snapshot matches what's shown here.
-            this.hideRecheckModal();
-        }
-
+        // Saving from step 5 is what produces the report, so land the user on it.
+        // currentStep was already bumped to totalSteps above, before the payload was
+        // built, so the persisted snapshot matches what's shown here.
+        this.hideRecheckModal();
         this.isViewMode = true;
         this.updateStepUI();
         window.scrollTo({ top: 0, behavior: 'smooth' });
 
-        // The modal path needs no alert: closing the modal onto the finished report is
-        // the confirmation. The step-6 button gives no such visual change, so it keeps one.
-        if (!fromModal) alert('บันทึกข้อมูลสำเร็จ (Data saved successfully!)');
+        // Closing the modal onto the finished report is itself the confirmation --
+        // no further alert needed.
     },
 
     // Step 5's "สรุปผลเป็นรายงาน" opens this instead of saving straight away: the
@@ -1995,8 +1974,22 @@ export const appState = {
 
 
 // ==========================================
-// SUPABASE LOGIC 
+// SUPABASE LOGIC
 // ==========================================
+
+// The browser's back/forward cache can restore this whole page -- DOM, form values,
+// whatever step was showing -- from memory without re-running any of the init logic
+// below (no DOMContentLoaded fires). Clicking "New Assessment" then "back" then
+// "New Assessment" again could land on a stale bfcache snapshot: old field values,
+// old checked SDGs, whatever step it was left on -- including step 6, bypassing
+// every guard in goToStep()/initializeNewProject() because none of that code reran.
+// Forcing a real reload when a bfcache restore is detected guarantees "new" always
+// actually starts fresh.
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+        window.location.reload();
+    }
+});
 
 document.addEventListener('DOMContentLoaded', async () => {
     appState.init();
