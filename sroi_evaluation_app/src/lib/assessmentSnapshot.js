@@ -169,3 +169,49 @@ export function buildProjectPayload(state) {
         sroiCalculations: state.calculateSROI()
     };
 }
+
+/**
+ * Is there anything in this snapshot worth offering to resume?
+ *
+ * Used only for the dashboard's "continue draft / start new" prompt on the never-
+ * saved-project draft (getDraftKey()'s 'new' slot) -- an autosave can fire on trivial
+ * interaction (e.g. filtering the SDG list) and leave a technically-non-null but
+ * empty draft behind, which should not trigger the prompt.
+ */
+const parseNumberValue = value => parseFloat(value) || 0;
+
+/**
+ * Has anything actually been typed into this SROI row, vs. it still being the blank
+ * row createSROIRow() hands out by default? Shared with appState.isSROIRowStarted()
+ * so "started" means the same thing whether it's driving the SROI calculation or the
+ * dashboard's draft-resume prompt.
+ */
+export function isSROIRowStarted(row) {
+    const textFields = [
+        'stakeholderGroup',
+        'inputDescription',
+        'outputSummary',
+        'changeDepth',
+        'weighting',
+        'outcomeDescription',
+        'valuationApproach',
+        'indicatorSource'
+    ];
+    const moneyFields = ['groupSize', 'investment', 'quantity', 'monetaryValue'];
+    const adjustmentFields = ['deadweight', 'displacement', 'attribution', 'dropoff'];
+
+    return textFields.some(field => String(row[field] ?? '').trim())
+        || moneyFields.some(field => parseNumberValue(row[field]) > 0)
+        || adjustmentFields.some(field => parseNumberValue(row[field]) > 0)
+        || parseNumberValue(row.duration) !== 1
+        || parseNumberValue(row.discountRate) !== 3.5
+        || row.outcomeStart !== 'period-activity';
+}
+
+export function hasMeaningfulContent(snapshot) {
+    if (!snapshot) return false;
+    if ((snapshot.selectedSDGs ?? []).length > 0) return true;
+    if (snapshot.uploadedImage) return true;
+    if ((snapshot.sroiRows ?? []).some(isSROIRowStarted)) return true;
+    return Object.values(snapshot.fields ?? {}).some(value => String(value ?? '').trim() !== '');
+}

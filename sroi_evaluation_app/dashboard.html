@@ -55,9 +55,33 @@
                 <p class="text-gray-500" id="welcome-message">Welcome back</p>
             </div>
             
-            <button onclick="window.location.href='/index.html?new=true'" class="bg-chula hover:bg-chula-dark text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:-translate-y-1 flex items-center gap-2">
+            <button id="new-assessment-btn" data-testid="new-assessment-btn" class="bg-chula hover:bg-chula-dark text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:-translate-y-1 flex items-center gap-2">
                 <i class="fa-solid fa-plus"></i> สร้างแบบประเมินใหม่
             </button>
+        </div>
+
+        <!-- Shown only when a not-yet-saved "new assessment" draft already exists on
+             this device (see dashboard.js). Lets the user resume it or discard it and
+             start over, instead of silently doing either. -->
+        <div id="draft-choice-modal" class="hidden fixed inset-0 z-[1000] bg-gray-900 bg-opacity-60 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-2">พบแบบประเมินที่ยังไม่ได้บันทึก</h3>
+                <p class="text-sm text-gray-500 mb-5">มีข้อมูลที่กรอกไว้ก่อนหน้านี้ในเครื่องนี้ ต้องการทำต่อจาก draft เดิม หรือเริ่มแบบฟอร์มใหม่?</p>
+                <div class="flex flex-col gap-2">
+                    <button id="draft-choice-continue" data-testid="draft-choice-continue"
+                            class="bg-chula hover:bg-chula-dark text-white font-medium py-2.5 px-4 rounded-lg shadow transition-colors">
+                        ทำต่อจาก draft เดิม (Continue draft)
+                    </button>
+                    <button id="draft-choice-fresh" data-testid="draft-choice-fresh"
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 px-4 rounded-lg transition-colors">
+                        เริ่มแบบฟอร์มใหม่ (Start new, discard draft)
+                    </button>
+                    <button id="draft-choice-cancel" data-testid="draft-choice-cancel"
+                            class="text-gray-400 hover:text-gray-600 text-sm py-1">
+                        ยกเลิก
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Projects Grid Container -->

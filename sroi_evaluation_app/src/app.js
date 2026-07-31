@@ -13,7 +13,8 @@ import {
     serialiseAssessment,
     deserialiseAssessment,
     normaliseSnapshot,
-    buildProjectPayload
+    buildProjectPayload,
+    isSROIRowStarted
 } from './lib/assessmentSnapshot.js';
 
 // Helper to scope draft keys per project ID so projects don't bleed into each other
@@ -1453,27 +1454,9 @@ export const appState = {
         return Math.max(0, Math.min(100, this.parseNumberValue(value))) / 100;
     },
 
-    isSROIRowStarted(row) {
-        const textFields = [
-            'stakeholderGroup',
-            'inputDescription',
-            'outputSummary',
-            'changeDepth',
-            'weighting',
-            'outcomeDescription',
-            'valuationApproach',
-            'indicatorSource'
-        ];
-        const moneyFields = ['groupSize', 'investment', 'quantity', 'monetaryValue'];
-        const adjustmentFields = ['deadweight', 'displacement', 'attribution', 'dropoff'];
-
-        return textFields.some(field => String(row[field] ?? '').trim())
-            || moneyFields.some(field => this.parseNumberValue(row[field]) > 0)
-            || adjustmentFields.some(field => this.parseNumberValue(row[field]) > 0)
-            || this.parseNumberValue(row.duration) !== 1
-            || this.parseNumberValue(row.discountRate) !== 3.5
-            || row.outcomeStart !== 'period-activity';
-    },
+    // Shared with the dashboard's draft-resume prompt (hasMeaningfulContent()) so
+    // "started" means the same thing everywhere.
+    isSROIRowStarted,
 
     getActiveSROIRows() {
         return this.sroiRows.filter(row => this.isSROIRowStarted(row));
@@ -1871,7 +1854,12 @@ export const appState = {
         if (!rawDraft) return;
 
         try {
-            deserialiseAssessment(normaliseSnapshot(JSON.parse(rawDraft)), this);
+            // For an existing project (?id=...), loadExistingProject() runs right after
+            // this during page load and overwrites currentStep from the saved row anyway
+            // -- setting it here only matters for resuming a "new project" draft, where
+            // it's what lets "Continue draft" reopen on the step the user left off at.
+            const { currentStep } = deserialiseAssessment(normaliseSnapshot(JSON.parse(rawDraft)), this);
+            this.currentStep = currentStep;
         } catch (error) {
             console.warn('Could not load SROI draft', error);
         }
@@ -2010,6 +1998,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const projectId = urlParams.get('id');
     const isNew = urlParams.get('new');
+    // Set only by the dashboard's "start new assessment" choice (never by "continue
+    // draft" or by the plain new-assessment link when there was no draft to ask
+    // about) -- see index.html?new=true[&fresh=1] and dashboard.js.
+    const isFresh = urlParams.get('fresh') === '1';
 
     if (projectId || isNew) {
         appState.showView('view-app');
@@ -2021,7 +2013,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (projectId) {
             await loadExistingProject(projectId, identity);
         } else {
-            initializeNewProject(identity);
+            initializeNewProject(identity, isFresh);
         }
     } else {
         window.location.href = '/dashboard.html';
@@ -2079,31 +2071,42 @@ async function loadExistingProject(id, identity) {
     appState.updateLiveSummary();
 }
 
-function initializeNewProject(identity) {
-    // Every never-saved project shares the same draft key ('sroi-evaluation-draft-new',
-    // see getDraftKey()), and appState.init() -> loadDraft() already ran before we knew
-    // whether this load was "new" or "existing" -- so a genuinely new assessment can come
-    // up pre-filled (SDGs checked, etc.) with whatever a previous, unrelated, abandoned
-    // new project last autosaved. Wipe both the stored draft and the state/DOM it already
-    // populated so "new" always actually means new.
-    localStorage.removeItem('sroi-evaluation-draft-new');
+/**
+ * @param identity
+ * @param fresh - true only when the dashboard's "start new assessment" choice was
+ *   picked over an existing draft (see index.html?new=true&fresh=1 in the
+ *   DOMContentLoaded handler above). Every never-saved project shares one draft key
+ *   ('sroi-evaluation-draft-new', see getDraftKey()), and appState.init() ->
+ *   loadDraft() already ran before we knew "new" vs "existing" -- so by this point a
+ *   previous, unrelated, abandoned new-project draft may already be sitting in the
+ *   form (and appState.currentStep may already be wherever that draft left off).
+ *   fresh=true wipes both the stored draft and what loadDraft() just populated, so
+ *   "start new" always actually means new. fresh=false ("continue draft", or a plain
+ *   new-assessment click when there was nothing to resume) leaves all of that alone.
+ */
+function initializeNewProject(identity, fresh) {
+    if (fresh) {
+        localStorage.removeItem('sroi-evaluation-draft-new');
 
-    appState.currentStep = 1;
-    appState.uploadedImage = null;
-    appState.sroiRows = [appState.createSROIRow()];
-    appState.isViewMode = false;
+        appState.currentStep = 1;
+        appState.uploadedImage = null;
+        appState.sroiRows = [appState.createSROIRow()];
+        appState.isViewMode = false;
 
-    document.querySelectorAll('input, textarea').forEach(el => {
-        // Checkbox/radio "value" is a fixed identifier (e.g. "SDG 2: ..."), not user
-        // text -- clearing it would permanently break lookups like generateReport()'s
-        // .sdg-checkbox:checked -> cb.value, even after the box is checked again.
-        if (el.type !== 'file' && el.type !== 'checkbox' && el.type !== 'radio') el.value = '';
-    });
-    document.querySelectorAll('select').forEach(el => { el.selectedIndex = 0; });
-    document.querySelectorAll('.sdg-checkbox').forEach(cb => { cb.checked = false; });
+        document.querySelectorAll('input, textarea').forEach(el => {
+            // Checkbox/radio "value" is a fixed identifier (e.g. "SDG 2: ..."), not user
+            // text -- clearing it would permanently break lookups like generateReport()'s
+            // .sdg-checkbox:checked -> cb.value, even after the box is checked again.
+            if (el.type !== 'file' && el.type !== 'checkbox' && el.type !== 'radio') el.value = '';
+        });
+        document.querySelectorAll('select').forEach(el => { el.selectedIndex = 0; });
+        document.querySelectorAll('.sdg-checkbox').forEach(cb => { cb.checked = false; });
 
-    appState.renderSROIRows();
-    appState.updateSelectedSDGs();
+        appState.renderSROIRows();
+        appState.updateSelectedSDGs();
+    } else {
+        appState.isViewMode = false;
+    }
 
     // A brand-new project has no row yet, so the creator is treated as its owner.
     appState.applyProjectAccess(identity, null);

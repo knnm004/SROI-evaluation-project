@@ -4,6 +4,10 @@ import { supabase } from './lib/supabaseClient.js';
 import { escapeHTML, formatThaiDate, formatUpdatedMeta } from './lib/format.js';
 import { loadIdentity, signOut } from './lib/session.js';
 import { isAdmin, canDeleteProject } from './lib/permissions.js';
+import { normaliseSnapshot, hasMeaningfulContent } from './lib/assessmentSnapshot.js';
+
+// Same key app.js's getDraftKey() uses for a never-saved project (id-less URL).
+const NEW_PROJECT_DRAFT_KEY = 'sroi-evaluation-draft-new';
 
 let currentIdentity = null;
 
@@ -27,7 +31,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     fetchProjects();
 
     document.getElementById('logout-btn')?.addEventListener('click', () => signOut());
+    setupNewAssessmentButton();
 });
+
+/**
+ * "New Assessment" doesn't just navigate anymore: if a not-yet-saved draft already
+ * exists on this device (app.js's getDraftKey() 'new' slot), ask whether to resume it
+ * or discard it, rather than silently doing either. Nothing here touches an existing
+ * project's own draft (keyed by project id) -- see NEW_PROJECT_DRAFT_KEY.
+ */
+function setupNewAssessmentButton() {
+    const button = document.getElementById('new-assessment-btn');
+    const modal = document.getElementById('draft-choice-modal');
+    if (!button || !modal) return;
+
+    button.addEventListener('click', () => {
+        let hasDraft = false;
+        try {
+            const raw = localStorage.getItem(NEW_PROJECT_DRAFT_KEY);
+            hasDraft = raw ? hasMeaningfulContent(normaliseSnapshot(JSON.parse(raw))) : false;
+        } catch (error) {
+            console.warn('Could not read new-assessment draft', error);
+        }
+
+        if (hasDraft) {
+            modal.classList.remove('hidden');
+        } else {
+            window.location.href = '/index.html?new=true';
+        }
+    });
+
+    document.getElementById('draft-choice-continue')?.addEventListener('click', () => {
+        window.location.href = '/index.html?new=true';
+    });
+    document.getElementById('draft-choice-fresh')?.addEventListener('click', () => {
+        window.location.href = '/index.html?new=true&fresh=1';
+    });
+    document.getElementById('draft-choice-cancel')?.addEventListener('click', () => {
+        modal.classList.add('hidden');
+    });
+}
 
 async function fetchProjects() {
     const container = document.getElementById('projects-container');
