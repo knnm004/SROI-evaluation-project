@@ -724,6 +724,16 @@ export const appState = {
         });
     },
 
+    // Landing nav's "เกี่ยวกับระบบ" / "ช่วยเหลือ" links: open the About panel (it also
+    // holds the contact email) and scroll it into view, rather than pointing at pages
+    // that don't exist.
+    scrollToIntro() {
+        const details = document.getElementById('intro-details');
+        if (!details) return;
+        details.open = true;
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
     // Landing page's collapsed "เกี่ยวกับระบบนี้" panel: one language block visible
     // at a time instead of both full Thai and English copies stacked together.
     showIntroLang(lang) {
