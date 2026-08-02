@@ -15,4 +15,38 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+function createMissingConfigClient() {
+  const error = new Error(
+    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Auth and database calls are disabled in this local session.'
+  );
+
+  const emptyQuery = {
+    select: () => emptyQuery,
+    insert: () => emptyQuery,
+    update: () => emptyQuery,
+    delete: () => emptyQuery,
+    upsert: () => emptyQuery,
+    eq: () => emptyQuery,
+    order: () => emptyQuery,
+    maybeSingle: async () => ({ data: null, error }),
+    single: async () => ({ data: null, error }),
+    then: resolve => Promise.resolve({ data: [], error }).then(resolve)
+  };
+
+  console.warn(error.message);
+
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      signInWithOAuth: async () => ({ data: null, error }),
+      signInWithPassword: async () => ({ data: null, error }),
+      signOut: async () => ({ error: null })
+    },
+    from: () => emptyQuery,
+    rpc: async () => ({ data: null, error })
+  };
+}
+
+export const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
+  : createMissingConfigClient();

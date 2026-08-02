@@ -30,7 +30,7 @@ export const SNAPSHOT_VERSION = 2;
  *   member-email-input  - the "add a researcher" box; a half-typed colleague's
  *                         address must never be persisted into the assessment
  */
-const TRANSIENT_FIELD_IDS = new Set(['sdg-search', 'member-email-input']);
+const TRANSIENT_FIELD_IDS = new Set(['sdg-search', 'member-email-input', 'boundary-search', 'boundary-admin-level']);
 
 /**
  * Read the whole form into a plain object. The ONLY reader.
@@ -60,6 +60,7 @@ export function serialiseAssessment(state) {
         sdgReasons,
         sroiRows: state.sroiRows,
         uploadedImage: state.uploadedImage ?? null,
+        activityImages: state.activityImages ?? [],
         savedAt: new Date().toISOString()
     };
 }
@@ -85,6 +86,8 @@ export function deserialiseAssessment(snapshot, state) {
         const element = document.getElementById(id);
         if (element && element.type !== 'file') element.value = value;
     });
+    state.syncObjectivesFromHidden?.();
+    state.updateKeyTakeawayCounter?.();
 
     const selected = new Set(snapshot.selectedSDGs ?? []);
     document.querySelectorAll('.sdg-checkbox').forEach(cb => {
@@ -97,15 +100,12 @@ export function deserialiseAssessment(snapshot, state) {
         if (note) note.value = value;
     });
 
-    if (snapshot.uploadedImage) {
-        state.uploadedImage = snapshot.uploadedImage;
-        const preview = document.getElementById('photo-preview');
-        if (preview) {
-            preview.src = snapshot.uploadedImage;
-            preview.classList.remove('hidden');
-            document.getElementById('photo-placeholder')?.classList.add('hidden');
-        }
-    }
+    const restoredActivityImages = Array.isArray(snapshot.activityImages) && snapshot.activityImages.length
+        ? snapshot.activityImages
+        : (snapshot.uploadedImage ? [{ src: snapshot.uploadedImage }] : []);
+    state.activityImages = restoredActivityImages.map(image => state.createActivityImage?.(image) ?? image);
+    state.uploadedImage = state.activityImages.find(image => image.src)?.src ?? snapshot.uploadedImage ?? null;
+    state.renderActivityPhotoSlots?.();
 
     state.filterSDGs();
 
@@ -151,6 +151,7 @@ export function normaliseSnapshot(raw) {
         sdgReasons: {},
         sroiRows: recoveredRows,
         uploadedImage,
+        activityImages: uploadedImage ? [{ src: uploadedImage }] : [],
         savedAt: raw.savedAt ?? null,
         migratedFrom: 1
     };
@@ -212,6 +213,7 @@ export function hasMeaningfulContent(snapshot) {
     if (!snapshot) return false;
     if ((snapshot.selectedSDGs ?? []).length > 0) return true;
     if (snapshot.uploadedImage) return true;
+    if ((snapshot.activityImages ?? []).some(image => image?.src)) return true;
     if ((snapshot.sroiRows ?? []).some(isSROIRowStarted)) return true;
     return Object.values(snapshot.fields ?? {}).some(value => String(value ?? '').trim() !== '');
 }
