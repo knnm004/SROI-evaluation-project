@@ -1,13 +1,31 @@
 import html2pdf from 'html2pdf.js';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './lib/supabaseClient.js';
+import { escapeHTML, formatMoney, formatNumber, formatUpdatedMeta } from './lib/format.js';
+import { loadIdentity, signInWithGoogle, signInWithPassword, signOut } from './lib/session.js';
+import {
+    canEditProject,
+    canDeleteProject,
+    canManageMembers,
+    isOwner,
+    describeAccess
+} from './lib/permissions.js';
+import {
+    serialiseAssessment,
+    deserialiseAssessment,
+    normaliseSnapshot,
+    buildProjectPayload,
+    isSROIRowStarted
+} from './lib/assessmentSnapshot.js';
 
-// Initialize Supabase using Vite environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Helper to scope draft keys per project ID so projects don't bleed into each other
+function getDraftKey() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id') || 'new';
+    return `sroi-evaluation-draft-${id}`;
+}
 
-const DRAFT_KEY = 'sroi-evaluation-draft-v2';
 const OSM_SEARCH_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
+const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
 const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_DEFAULT_CENTER = [13.7563, 100.5018];
 const OSM_DEFAULT_ZOOM = 11;
@@ -32,53 +50,512 @@ const SDGs_LIST = [
     { id: 17, title: "ความร่วมมือเพื่อการพัฒนาที่ยั่งยืน", focus: "เครือข่าย นโยบาย ความร่วมมือข้ามภาคส่วน" }
 ];
 
-const PATHWAY_FIELDS = [
-    'i_inputs',
-    'i_knowledge',
-    'i_stakeholders',
-    'i_activities',
-    'i_output',
-    'i_output_sdg',
-    'i_outcome',
-    'i_outcome_stakeholders',
-    'i_impact_economic',
-    'i_impact_social',
-    'i_impact_environment',
-    'i_toc_statement',
-    'i_indicator_output',
-    'i_indicator_outcome',
-    'i_indicator_impact'
-];
+const SDG_TARGETS = {
+    1: [
+        { code: "1.1", title: "ยุติความยากจนขั้นรุนแรง" },
+        { code: "1.2", title: "ลดความยากจนตามนิยามประเทศ" },
+        { code: "1.3", title: "ระบบคุ้มครองทางสังคม" },
+        { code: "1.4", title: "สิทธิในทรัพยากรและบริการพื้นฐาน" },
+        { code: "1.5", title: "ความยืดหยุ่นต่อภัยพิบัติและวิกฤต" },
+        { code: "1.a", title: "ระดมทรัพยากรเพื่อขจัดความยากจน" },
+        { code: "1.b", title: "นโยบายสนับสนุนคนยากจนและความเท่าเทียม" }
+    ],
+    2: [
+        { code: "2.1", title: "ยุติความหิวโหยและเข้าถึงอาหาร" },
+        { code: "2.2", title: "ยุติภาวะทุพโภชนาการ" },
+        { code: "2.3", title: "เพิ่มผลิตภาพและรายได้เกษตรกรรายย่อย" },
+        { code: "2.4", title: "ระบบผลิตอาหารที่ยั่งยืน" },
+        { code: "2.5", title: "รักษาความหลากหลายทางพันธุกรรม" },
+        { code: "2.a", title: "ลงทุนด้านเกษตรและวิจัยชนบท" },
+        { code: "2.b", title: "แก้ข้อจำกัดและการบิดเบือนการค้าเกษตร" },
+        { code: "2.c", title: "ตลาดอาหารและราคาที่มีเสถียรภาพ" }
+    ],
+    3: [
+        { code: "3.1", title: "ลดการตายของมารดา" },
+        { code: "3.2", title: "ยุติการตายที่ป้องกันได้ของทารกและเด็ก" },
+        { code: "3.3", title: "ยุติโรคเอดส์ วัณโรค มาลาเรีย และโรคติดต่อ" },
+        { code: "3.4", title: "ลดการเสียชีวิตก่อนวัยจากโรคไม่ติดต่อและส่งเสริมสุขภาพจิต" },
+        { code: "3.5", title: "ป้องกันและบำบัดการใช้สารเสพติด" },
+        { code: "3.6", title: "ลดการเสียชีวิตและบาดเจ็บจากถนน" },
+        { code: "3.7", title: "เข้าถึงอนามัยเจริญพันธุ์และการวางแผนครอบครัว" },
+        { code: "3.8", title: "หลักประกันสุขภาพถ้วนหน้า" },
+        { code: "3.9", title: "ลดโรคจากมลพิษและสารเคมี" },
+        { code: "3.a", title: "ควบคุมยาสูบ" },
+        { code: "3.b", title: "วิจัยและเข้าถึงยา/วัคซีนจำเป็น" },
+        { code: "3.c", title: "เพิ่มบุคลากรและงบระบบสุขภาพ" },
+        { code: "3.d", title: "เสริมศักยภาพจัดการความเสี่ยงสุขภาพ" }
+    ],
+    4: [
+        { code: "4.1", title: "การศึกษาประถมและมัธยมที่มีคุณภาพ" },
+        { code: "4.2", title: "พัฒนาเด็กปฐมวัยและเตรียมความพร้อม" },
+        { code: "4.3", title: "เข้าถึงอาชีวศึกษา อุดมศึกษา และการเรียนรู้ผู้ใหญ่" },
+        { code: "4.4", title: "ทักษะอาชีพและทักษะดิจิทัล" },
+        { code: "4.5", title: "ลดความเหลื่อมล้ำทางการศึกษา" },
+        { code: "4.6", title: "การอ่านออกเขียนได้และคำนวณได้" },
+        { code: "4.7", title: "การพัฒนาที่ยั่งยืน สิทธิ และพลเมืองโลก" },
+        { code: "4.a", title: "สถานศึกษาปลอดภัยและเข้าถึงได้" },
+        { code: "4.b", title: "ทุนการศึกษา" },
+        { code: "4.c", title: "ครูที่มีคุณภาพ" }
+    ],
+    5: [
+        { code: "5.1", title: "ยุติการเลือกปฏิบัติต่อผู้หญิงและเด็กหญิง" },
+        { code: "5.2", title: "ยุติความรุนแรงและการแสวงประโยชน์" },
+        { code: "5.3", title: "ยุติการแต่งงานเด็กและการขลิบอวัยวะเพศหญิง" },
+        { code: "5.4", title: "เห็นคุณค่างานดูแลที่ไม่ได้รับค่าจ้าง" },
+        { code: "5.5", title: "การมีส่วนร่วมและภาวะผู้นำของผู้หญิง" },
+        { code: "5.6", title: "สิทธิอนามัยเจริญพันธุ์" },
+        { code: "5.a", title: "สิทธิเท่าเทียมในทรัพยากรเศรษฐกิจและที่ดิน" },
+        { code: "5.b", title: "ใช้เทคโนโลยีเพื่อเสริมพลังผู้หญิง" },
+        { code: "5.c", title: "นโยบายและกฎหมายเพื่อความเท่าเทียมทางเพศ" }
+    ],
+    6: [
+        { code: "6.1", title: "เข้าถึงน้ำดื่มปลอดภัย" },
+        { code: "6.2", title: "สุขาภิบาลและสุขอนามัยที่เพียงพอ" },
+        { code: "6.3", title: "คุณภาพน้ำและการบำบัดน้ำเสีย" },
+        { code: "6.4", title: "ประสิทธิภาพการใช้น้ำและแก้ขาดแคลนน้ำ" },
+        { code: "6.5", title: "จัดการทรัพยากรน้ำแบบบูรณาการ" },
+        { code: "6.6", title: "ปกป้องระบบนิเวศที่เกี่ยวข้องกับน้ำ" },
+        { code: "6.a", title: "ความร่วมมือด้านน้ำและสุขาภิบาล" },
+        { code: "6.b", title: "การมีส่วนร่วมของชุมชนในการจัดการน้ำ" }
+    ],
+    7: [
+        { code: "7.1", title: "เข้าถึงพลังงานสมัยใหม่ในราคาที่จ่ายได้" },
+        { code: "7.2", title: "เพิ่มสัดส่วนพลังงานหมุนเวียน" },
+        { code: "7.3", title: "เพิ่มประสิทธิภาพการใช้พลังงาน" },
+        { code: "7.a", title: "ความร่วมมือด้านพลังงานสะอาด" },
+        { code: "7.b", title: "โครงสร้างพื้นฐานและเทคโนโลยีพลังงาน" }
+    ],
+    8: [
+        { code: "8.1", title: "การเติบโตทางเศรษฐกิจต่อหัว" },
+        { code: "8.2", title: "ผลิตภาพผ่านนวัตกรรมและมูลค่าเพิ่ม" },
+        { code: "8.3", title: "ผู้ประกอบการ งานที่มีคุณค่า และธุรกิจขนาดเล็ก" },
+        { code: "8.4", title: "ใช้ทรัพยากรอย่างมีประสิทธิภาพ" },
+        { code: "8.5", title: "จ้างงานเต็มที่และค่าจ้างเท่าเทียม" },
+        { code: "8.6", title: "ลดเยาวชนที่ไม่ได้เรียนหรือทำงาน" },
+        { code: "8.7", title: "ยุติแรงงานบังคับ แรงงานเด็ก และค้ามนุษย์" },
+        { code: "8.8", title: "สิทธิแรงงานและสภาพแวดล้อมปลอดภัย" },
+        { code: "8.9", title: "ท่องเที่ยวยั่งยืนที่สร้างงาน" },
+        { code: "8.10", title: "เข้าถึงบริการการเงิน" },
+        { code: "8.a", title: "ช่วยเหลือเพื่อการค้า" },
+        { code: "8.b", title: "ยุทธศาสตร์การจ้างงานเยาวชน" }
+    ],
+    9: [
+        { code: "9.1", title: "โครงสร้างพื้นฐานที่ยั่งยืนและเข้าถึงได้" },
+        { code: "9.2", title: "อุตสาหกรรมที่ครอบคลุมและยั่งยืน" },
+        { code: "9.3", title: "ธุรกิจขนาดเล็กเข้าถึงบริการการเงินและห่วงโซ่มูลค่า" },
+        { code: "9.4", title: "ปรับปรุงอุตสาหกรรมให้สะอาดและใช้ทรัพยากรคุ้มค่า" },
+        { code: "9.5", title: "วิจัย นวัตกรรม และเทคโนโลยี" },
+        { code: "9.a", title: "สนับสนุนโครงสร้างพื้นฐานในประเทศกำลังพัฒนา" },
+        { code: "9.b", title: "พัฒนาเทคโนโลยีและนวัตกรรมภายในประเทศ" },
+        { code: "9.c", title: "เข้าถึง ICT และอินเทอร์เน็ต" }
+    ],
+    10: [
+        { code: "10.1", title: "เพิ่มรายได้ของกลุ่มล่างสุด" },
+        { code: "10.2", title: "เสริมพลังและความครอบคลุมทางสังคม เศรษฐกิจ การเมือง" },
+        { code: "10.3", title: "โอกาสเท่าเทียมและลดการเลือกปฏิบัติ" },
+        { code: "10.4", title: "นโยบายการคลัง ค่าจ้าง และคุ้มครองทางสังคม" },
+        { code: "10.5", title: "กำกับดูแลตลาดและสถาบันการเงิน" },
+        { code: "10.6", title: "เสียงของประเทศกำลังพัฒนาในสถาบันโลก" },
+        { code: "10.7", title: "การย้ายถิ่นที่ปลอดภัยและมีระเบียบ" },
+        { code: "10.a", title: "หลักปฏิบัติพิเศษทางการค้า" },
+        { code: "10.b", title: "ความช่วยเหลือและเงินทุนเพื่อการพัฒนา" },
+        { code: "10.c", title: "ลดต้นทุนการส่งเงินกลับประเทศ" }
+    ],
+    11: [
+        { code: "11.1", title: "ที่อยู่อาศัยและบริการพื้นฐานที่ปลอดภัย" },
+        { code: "11.2", title: "ระบบขนส่งปลอดภัยและเข้าถึงได้" },
+        { code: "11.3", title: "เมืองที่มีส่วนร่วมและยั่งยืน" },
+        { code: "11.4", title: "คุ้มครองมรดกทางวัฒนธรรมและธรรมชาติ" },
+        { code: "11.5", title: "ลดผลกระทบจากภัยพิบัติ" },
+        { code: "11.6", title: "ลดผลกระทบสิ่งแวดล้อมของเมือง" },
+        { code: "11.7", title: "พื้นที่สาธารณะและพื้นที่สีเขียวปลอดภัย" },
+        { code: "11.a", title: "เชื่อมโยงเมือง ชนบท และภูมิภาค" },
+        { code: "11.b", title: "นโยบายเมืองด้านความยืดหยุ่นและภัยพิบัติ" },
+        { code: "11.c", title: "สนับสนุนอาคารยั่งยืนในประเทศพัฒนาน้อยที่สุด" }
+    ],
+    12: [
+        { code: "12.1", title: "แผนการผลิตและบริโภคที่ยั่งยืน" },
+        { code: "12.2", title: "จัดการทรัพยากรธรรมชาติอย่างยั่งยืน" },
+        { code: "12.3", title: "ลดขยะอาหาร" },
+        { code: "12.4", title: "จัดการสารเคมีและของเสียอย่างปลอดภัย" },
+        { code: "12.5", title: "ลดของเสียด้วยป้องกัน ลด ใช้ซ้ำ รีไซเคิล" },
+        { code: "12.6", title: "ความยั่งยืนในองค์กรและการรายงาน" },
+        { code: "12.7", title: "จัดซื้อจัดจ้างภาครัฐที่ยั่งยืน" },
+        { code: "12.8", title: "ข้อมูลและความตระหนักเพื่อวิถียั่งยืน" },
+        { code: "12.a", title: "วิทยาศาสตร์และเทคโนโลยีเพื่อการบริโภคยั่งยืน" },
+        { code: "12.b", title: "ติดตามผลกระทบท่องเที่ยวยั่งยืน" },
+        { code: "12.c", title: "ปรับลดอุดหนุนเชื้อเพลิงฟอสซิลที่ไม่มีประสิทธิภาพ" }
+    ],
+    13: [
+        { code: "13.1", title: "ความยืดหยุ่นต่อภัยพิบัติและภูมิอากาศ" },
+        { code: "13.2", title: "บูรณาการมาตรการภูมิอากาศในนโยบาย" },
+        { code: "13.3", title: "การศึกษาและศักยภาพด้านภูมิอากาศ" },
+        { code: "13.a", title: "ระดมทุนด้านภูมิอากาศ" },
+        { code: "13.b", title: "ศักยภาพการวางแผนภูมิอากาศในประเทศเปราะบาง" }
+    ],
+    14: [
+        { code: "14.1", title: "ลดมลพิษทางทะเล" },
+        { code: "14.2", title: "จัดการระบบนิเวศทะเลและชายฝั่ง" },
+        { code: "14.3", title: "ลดผลกระทบกรดในมหาสมุทร" },
+        { code: "14.4", title: "ประมงยั่งยืนและยุติการจับเกินขนาด" },
+        { code: "14.5", title: "อนุรักษ์พื้นที่ชายฝั่งและทะเล" },
+        { code: "14.6", title: "ยุติเงินอุดหนุนประมงที่เป็นอันตราย" },
+        { code: "14.7", title: "ประโยชน์เศรษฐกิจจากทรัพยากรทะเลอย่างยั่งยืน" },
+        { code: "14.a", title: "วิทยาศาสตร์และเทคโนโลยีทางทะเล" },
+        { code: "14.b", title: "สิทธิประมงรายย่อย" },
+        { code: "14.c", title: "กฎหมายทะเลและการอนุรักษ์" }
+    ],
+    15: [
+        { code: "15.1", title: "อนุรักษ์ระบบนิเวศบนบกและน้ำจืด" },
+        { code: "15.2", title: "จัดการป่าไม้ยั่งยืนและฟื้นฟูป่า" },
+        { code: "15.3", title: "ต่อสู้การแปรสภาพเป็นทะเลทรายและฟื้นฟูที่ดิน" },
+        { code: "15.4", title: "อนุรักษ์ระบบนิเวศภูเขา" },
+        { code: "15.5", title: "ลดการสูญเสียความหลากหลายทางชีวภาพ" },
+        { code: "15.6", title: "แบ่งปันประโยชน์จากทรัพยากรพันธุกรรม" },
+        { code: "15.7", title: "ยุติการล่าและค้าสัตว์ป่าผิดกฎหมาย" },
+        { code: "15.8", title: "จัดการชนิดพันธุ์ต่างถิ่นรุกราน" },
+        { code: "15.9", title: "บูรณาการคุณค่าระบบนิเวศในแผนและบัญชี" },
+        { code: "15.a", title: "ระดมทรัพยากรเพื่อความหลากหลายทางชีวภาพ" },
+        { code: "15.b", title: "ทรัพยากรเพื่อจัดการป่าไม้อย่างยั่งยืน" },
+        { code: "15.c", title: "สนับสนุนการต่อต้านล่าและค้าสัตว์ป่า" }
+    ],
+    16: [
+        { code: "16.1", title: "ลดความรุนแรงและการเสียชีวิต" },
+        { code: "16.2", title: "ยุติการล่วงละเมิด แสวงประโยชน์ และความรุนแรงต่อเด็ก" },
+        { code: "16.3", title: "หลักนิติธรรมและการเข้าถึงความยุติธรรม" },
+        { code: "16.4", title: "ลดเงินผิดกฎหมาย อาวุธผิดกฎหมาย และอาชญากรรมองค์กร" },
+        { code: "16.5", title: "ลดคอร์รัปชันและสินบน" },
+        { code: "16.6", title: "สถาบันที่มีประสิทธิภาพและโปร่งใส" },
+        { code: "16.7", title: "การตัดสินใจที่ตอบสนองและมีส่วนร่วม" },
+        { code: "16.8", title: "การมีส่วนร่วมของประเทศกำลังพัฒนาในธรรมาภิบาลโลก" },
+        { code: "16.9", title: "อัตลักษณ์ทางกฎหมายและทะเบียนเกิด" },
+        { code: "16.10", title: "เข้าถึงข้อมูลและคุ้มครองเสรีภาพพื้นฐาน" },
+        { code: "16.a", title: "ศักยภาพสถาบันในการป้องกันความรุนแรง" },
+        { code: "16.b", title: "กฎหมายและนโยบายไม่เลือกปฏิบัติ" }
+    ],
+    17: [
+        { code: "17.1", title: "ระดมทรัพยากรภายในประเทศ" },
+        { code: "17.2", title: "พันธกรณีความช่วยเหลือเพื่อการพัฒนา" },
+        { code: "17.3", title: "ระดมทุนเพิ่มเติมเพื่อประเทศกำลังพัฒนา" },
+        { code: "17.4", title: "ความยั่งยืนด้านหนี้" },
+        { code: "17.5", title: "ส่งเสริมการลงทุนในประเทศพัฒนาน้อยที่สุด" },
+        { code: "17.6", title: "ความร่วมมือวิทยาศาสตร์ เทคโนโลยี และนวัตกรรม" },
+        { code: "17.7", title: "ถ่ายทอดเทคโนโลยีที่เป็นมิตรต่อสิ่งแวดล้อม" },
+        { code: "17.8", title: "ธนาคารเทคโนโลยีและ ICT" },
+        { code: "17.9", title: "เสริมศักยภาพประเทศกำลังพัฒนา" },
+        { code: "17.10", title: "ระบบการค้าพหุภาคีที่เป็นธรรม" },
+        { code: "17.11", title: "เพิ่มการส่งออกของประเทศกำลังพัฒนา" },
+        { code: "17.12", title: "การเข้าถึงตลาดปลอดภาษีและโควตา" },
+        { code: "17.13", title: "เสถียรภาพเศรษฐกิจมหภาคโลก" },
+        { code: "17.14", title: "ความสอดคล้องเชิงนโยบายเพื่อการพัฒนาที่ยั่งยืน" },
+        { code: "17.15", title: "เคารพพื้นที่นโยบายของแต่ละประเทศ" },
+        { code: "17.16", title: "หุ้นส่วนระดับโลกเพื่อการพัฒนาที่ยั่งยืน" },
+        { code: "17.17", title: "หุ้นส่วนภาครัฐ เอกชน และประชาสังคม" },
+        { code: "17.18", title: "ข้อมูลและสถิติที่มีคุณภาพ" },
+        { code: "17.19", title: "ตัวชี้วัดความก้าวหน้านอกเหนือ GDP" }
+    ]
+};
 
 export const appState = {
     currentView: 'view-landing',
     currentStep: 1,
     totalSteps: 6,
     uploadedImage: null,
+    activityImages: [],
     isViewMode: false,
+    // Has the user actually changed anything THIS session, as opposed to just having
+    // opened a project or clicked "Edit"? Drives whether goHome() bothers them with the
+    // "saved as a draft" confirm -- reset wherever a session starts clean (new project,
+    // opening/resuming an existing one, entering edit mode), set by scheduleSave()
+    // (every real field-level change goes through it).
+    isDirty: false,
     sroiRows: [],
     areaMap: null,
     areaMarker: null,
     areaRectangle: null,
+    boundaryLayerGroup: null,
+    boundaryFeatureLookup: new Map(),
+    selectedBoundaryIds: new Set(),
+    boundaryAutoLoadTimer: null,
+    boundaryLastLoadKey: '',
     areaDragStart: null,
     isDrawingArea: false,
     mapSelectionMode: 'pin',
     areaSearchResults: [],
+    boundarySearchResults: [],
     lastGeocodeAt: 0,
     saveTimer: null,
     autosaveAttached: false,
-    
+
+    // Who is signed in, the project row being viewed, and what they may do with it.
+    // Filled by applyProjectAccess(). These shape the UI only -- RLS enforces.
+    identity: null,
+    projectMeta: null,
+    projectAccess: {
+        canEdit: false,
+        canDelete: false,
+        canManageMembers: false,
+        isOwner: false
+    },
+
+    /**
+     * Work out what this user may do with this project.
+     *
+     * @param identity from loadIdentity()
+     * @param project  the row, or null for a project that has not been saved yet
+     */
+    applyProjectAccess(identity, project) {
+        this.identity = identity ?? this.identity;
+        this.projectMeta = project ?? null;
+
+        if (!project) {
+            // Unsaved project: the person creating it is its owner, so they can see
+            // (and, once the project is saved, use) the researcher panel. renderMemberPanel()
+            // already disables the add-input and shows "save first" via #member-locked
+            // while there's no project id yet.
+            this.projectAccess = {
+                canEdit: !!this.identity,
+                canDelete: false,
+                canManageMembers: !!this.identity,
+                isOwner: true
+            };
+        } else {
+            this.projectAccess = {
+                canEdit: canEditProject(this.identity, project),
+                canDelete: canDeleteProject(this.identity, project),
+                canManageMembers: canManageMembers(this.identity, project),
+                isOwner: isOwner(this.identity, project)
+            };
+        }
+
+        // Permission may only ever TIGHTEN this flag, never loosen it.
+        if (!this.projectAccess.canEdit) this.isViewMode = true;
+
+        this.renderAccessBanner();
+        this.renderMemberPanel();
+    },
+
+    canEdit() {
+        return this.projectAccess.canEdit;
+    },
+
+    // ---- Researchers on this project -------------------------------------------
+
+    /** The current project's uuid, or null for one that has not been saved yet. */
+    getProjectId() {
+        return new URLSearchParams(window.location.search).get('id');
+    },
+
+    renderMemberPanel() {
+        const panel = document.getElementById('member-panel');
+        if (!panel) return;
+
+        // Only the owner and admins manage the team. Everyone else never sees it.
+        if (!this.projectAccess.canManageMembers) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        const projectId = this.getProjectId();
+        const input = document.getElementById('member-email-input');
+        const addBtn = document.getElementById('member-add-btn');
+        const locked = document.getElementById('member-locked');
+
+        // You cannot attach researchers to a project that has no row yet.
+        const unsaved = !projectId;
+        if (input) input.disabled = unsaved;
+        if (addBtn) addBtn.disabled = unsaved;
+        locked?.classList.toggle('hidden', !unsaved);
+
+        const members = this.projectMeta?.project_members ?? [];
+        const list = document.getElementById('member-list');
+        const count = document.getElementById('member-count');
+
+        if (count) {
+            count.textContent = members.length
+                ? `${members.length} คน`
+                : 'ยังไม่มีผู้ร่วมวิจัย';
+        }
+
+        if (!list) return;
+
+        if (members.length === 0) {
+            list.innerHTML = `<span class="text-xs text-gray-400">${
+                unsaved ? '' : 'เฉพาะคุณเท่านั้นที่เข้าถึงโครงการนี้'
+            }</span>`;
+            return;
+        }
+
+        // Chips hold other people's addresses, so everything is escaped.
+        list.innerHTML = members.map(member => {
+            const email = String(member.member_email ?? '');
+            const pending = !member.user_id;
+            return `
+                <span class="inline-flex items-center gap-2 bg-white border ${
+                    pending ? 'border-yellow-300' : 'border-gray-200'
+                } rounded-full pl-3 pr-1 py-1 text-xs" data-testid="member-chip">
+                    <span class="font-medium text-gray-700">${escapeHTML(email)}</span>
+                    ${pending ? '<span class="text-yellow-600">(รอเข้าสู่ระบบ)</span>' : ''}
+                    <button type="button" title="นำออกจากโครงการ"
+                            data-testid="member-remove-btn"
+                            onclick="appState.removeProjectMember('${escapeHTML(email).replaceAll("'", '&#039;')}')"
+                            class="w-5 h-5 flex items-center justify-center rounded-full text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </span>`;
+        }).join('');
+    },
+
+    showMemberFeedback(message, kind = 'ok') {
+        const el = document.getElementById('member-feedback');
+        if (!el) return;
+        el.textContent = message;
+        el.className = `text-xs mt-2 ${kind === 'error' ? 'text-red-600' : 'text-green-700'}`;
+        el.classList.remove('hidden');
+    },
+
+    async addProjectMember() {
+        if (!this.projectAccess.canManageMembers) return;
+
+        const projectId = this.getProjectId();
+        const input = document.getElementById('member-email-input');
+        if (!projectId || !input) return;
+
+        const email = input.value.trim().toLowerCase();
+
+        // Cheap local checks first, so obvious mistakes cost no round trip.
+        if (!email || !input.checkValidity()) {
+            this.showMemberFeedback('รูปแบบอีเมลไม่ถูกต้อง (Invalid email address)', 'error');
+            return;
+        }
+        if (email === this.identity?.email) {
+            this.showMemberFeedback('คุณเป็นเจ้าของโครงการนี้อยู่แล้ว (You already own this project)', 'error');
+            return;
+        }
+        if ((this.projectMeta?.project_members ?? []).some(
+            m => String(m.member_email ?? '').toLowerCase() === email)) {
+            this.showMemberFeedback('อีเมลนี้เป็นผู้ร่วมวิจัยอยู่แล้ว (Already a researcher on this project)', 'error');
+            return;
+        }
+
+        // An RPC, not a plain insert: the browser has no access to the accounts list,
+        // so resolving an email to a user id has to happen server-side. See
+        // add_project_researcher in supabase/migrations/0005_rls_v2.sql.
+        const { data, error } = await supabase.rpc('add_project_researcher', {
+            p_project_id: projectId,
+            p_email: email
+        });
+
+        if (error) {
+            console.error('Could not add researcher:', error);
+            this.showMemberFeedback('เพิ่มผู้ร่วมวิจัยไม่สำเร็จ (Could not add researcher)', 'error');
+            return;
+        }
+
+        const status = data?.status;
+        const messages = {
+            added:    `เพิ่ม ${email} เป็นผู้ร่วมวิจัยแล้ว`,
+            invited:  `${email} ยังไม่มีบัญชี — ระบบจะเพิ่มให้อัตโนมัติเมื่อเข้าสู่ระบบครั้งแรก`,
+            is_owner: 'อีเมลนี้เป็นเจ้าของโครงการอยู่แล้ว',
+            already:  'อีเมลนี้เป็นผู้ร่วมวิจัยอยู่แล้ว'
+        };
+        this.showMemberFeedback(
+            messages[status] ?? 'ดำเนินการเรียบร้อย',
+            status === 'added' || status === 'invited' ? 'ok' : 'error'
+        );
+
+        if (status === 'added' || status === 'invited') {
+            input.value = '';
+            await this.refreshProjectMembers();
+        }
+    },
+
+    async removeProjectMember(email) {
+        if (!this.projectAccess.canManageMembers) return;
+
+        const projectId = this.getProjectId();
+        if (!projectId || !email) return;
+
+        if (!confirm(`นำ ${email} ออกจากโครงการนี้?\n(Remove this researcher from the project?)`)) return;
+
+        const { data, error } = await supabase.rpc('remove_project_researcher', {
+            p_project_id: projectId,
+            p_email: email
+        });
+
+        if (error) {
+            console.error('Could not remove researcher:', error);
+            this.showMemberFeedback('นำออกไม่สำเร็จ (Could not remove researcher)', 'error');
+            return;
+        }
+
+        this.showMemberFeedback(
+            data?.status === 'removed' ? `นำ ${email} ออกแล้ว` : 'ไม่พบผู้ร่วมวิจัยรายนี้',
+            data?.status === 'removed' ? 'ok' : 'error'
+        );
+        await this.refreshProjectMembers();
+    },
+
+    /** Re-read the team from the database rather than trusting local edits. */
+    async refreshProjectMembers() {
+        const projectId = this.getProjectId();
+        if (!projectId || !this.projectMeta) return;
+
+        const { data, error } = await supabase
+            .from('project_members')
+            .select('user_id, member_email, added_at')
+            .eq('project_id', projectId);
+
+        if (error) {
+            console.error('Could not reload researchers:', error);
+            return;
+        }
+
+        this.projectMeta = { ...this.projectMeta, project_members: data ?? [] };
+        this.renderMemberPanel();
+    },
+
+    renderAccessBanner() {
+        const el = document.getElementById('project-access-banner');
+        if (!el) return;
+
+        if (!this.projectMeta || !this.identity) {
+            el.classList.add('hidden');
+            return;
+        }
+
+        const { canEdit } = this.projectAccess;
+        const role = describeAccess(this.identity, this.projectMeta);
+        const meta = formatUpdatedMeta(this.projectMeta);
+
+        el.className = `mb-4 rounded-xl px-4 py-3 text-sm flex flex-wrap items-center gap-x-3 gap-y-1 ${
+            canEdit
+                ? 'bg-blue-50 border border-blue-100 text-blue-800'
+                : 'bg-gray-50 border border-gray-200 text-gray-600'
+        }`;
+        el.innerHTML =
+            `<span class="font-bold"><i class="fa-solid fa-user-shield mr-2"></i>${escapeHTML(role)}</span>` +
+            (meta ? `<span class="text-xs opacity-80">${escapeHTML(meta)}</span>` : '');
+        el.classList.remove('hidden');
+    },
+
     init() {
         this.sroiRows = [this.createSROIRow()];
+        this.renderObjectiveInputs();
+        this.renderActivityPhotoSlots();
         this.renderSDGs();
         this.renderStepper();
         this.renderSROIRows();
         this.attachAutoSaveListeners();
         this.loadDraft();
+        this.syncObjectivesFromHidden();
+        this.updateKeyTakeawayCounter();
         this.updateSelectedSDGs();
         this.calculateSROIPreview();
         this.updateLiveSummary();
         this.setMapSelectionMode(this.getValue('m_location_type') || 'pin', false);
+        this.syncBoundarySelectionFromFields();
         this.updateAreaLocationUI();
     },
 
@@ -91,41 +568,106 @@ export const appState = {
     },
 
     async login() {
-        // 1. Grab the exact email and password the user typed into the screen
-        const emailInput = document.getElementById('login-email').value;
-        const passwordInput = document.getElementById('login-password').value;
-
-        // Make sure they actually typed something!
-        if (!emailInput || !passwordInput) {
-            alert("กรุณากรอกอีเมลและรหัสผ่าน (Please enter both email and password)");
-            return;
-        }
-
-        console.log(`Attempting to log in as: ${emailInput}`);
-        
-        // 2. Send the typed credentials to Supabase
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: emailInput,
-            password: passwordInput,
-        });
-
-        if (error) {
+        try {
+            await signInWithGoogle();
+        } catch (error) {
             console.error("Login failed:", error);
-            alert("อีเมลหรือรหัสผ่านไม่ถูกต้อง (Invalid email or password)");
+            alert("เกิดข้อผิดพลาดในการเข้าสู่ระบบ (Login error occurred)");
+        }
+    },
+
+    /** Member sign-in (สมาชิก/บุคคลทั่วไป). Wired to the #view-login form. */
+    async loginWithPassword(event) {
+        event?.preventDefault();
+
+        const emailEl = document.getElementById('login-email');
+        const passwordEl = document.getElementById('login-password');
+        const submit = document.getElementById('login-submit');
+        if (!emailEl || !passwordEl || !submit) return;
+
+        const email = emailEl.value.trim();
+        const password = passwordEl.value; // never trimmed, never logged
+
+        if (!email || !password) {
+            this.showLoginError('กรอกอีเมลและรหัสผ่านให้ครบ (Enter both email and password)');
+            return;
+        }
+        if (!emailEl.checkValidity()) {
+            this.showLoginError('รูปแบบอีเมลไม่ถูกต้อง (Invalid email format)');
             return;
         }
 
-        // 3. Simulating the successful redirect back to the dashboard
-        window.location.href = '/dashboard.html';
+        this.hideLoginError();
+        const originalLabel = submit.innerHTML;
+        submit.disabled = true;
+        submit.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังเข้าสู่ระบบ...';
+
+        try {
+            const result = await signInWithPassword(email, password);
+            if (!result.ok) {
+                this.showLoginError(result.message);
+                return;
+            }
+            passwordEl.value = ''; // don't leave the credential sitting in the DOM
+            window.location.assign('/dashboard.html');
+        } finally {
+            submit.disabled = false;
+            submit.innerHTML = originalLabel;
+        }
+    },
+
+    showLoginError(message) {
+        const el = document.getElementById('login-error');
+        if (!el) return;
+        el.textContent = message; // textContent, not innerHTML
+        el.classList.remove('hidden');
+    },
+
+    hideLoginError() {
+        document.getElementById('login-error')?.classList.add('hidden');
+    },
+
+    togglePasswordVisibility() {
+        const input = document.getElementById('login-password');
+        const icon = document.getElementById('login-password-toggle-icon');
+        if (!input) return;
+        const reveal = input.type === 'password';
+        input.type = reveal ? 'text' : 'password';
+        if (icon) icon.className = reveal ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye';
     },
 
     async logout() {
-        await supabase.auth.signOut();
-        window.location.href = '/'; 
+        // signOut() clears this app's drafts and redirects. Pass redirectTo: null so
+        // the existing form-clearing below still runs first.
+        await signOut({ redirectTo: null });
+
+        this.currentStep = 1;
+        this.uploadedImage = null;
+        this.activityImages = [];
+        this.sroiRows = [];
+        this.isViewMode = false;
+
+        document.querySelectorAll('input, textarea').forEach(el => {
+            if (el.type !== 'file') {
+                el.value = '';
+            }
+        });
+        document.querySelectorAll('select').forEach(el => { el.selectedIndex = 0; });
+        document.querySelectorAll('.sdg-checkbox').forEach(cb => cb.checked = false);
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+        window.location.href = window.location.pathname;
     },
 
     goHome() {
-        if(this.currentView === 'view-app' && !confirm('ข้อมูลถูกบันทึกเป็น draft บนเครื่องนี้ ต้องการกลับสู่หน้าหลักหรือไม่?')) return;
+        // Only prompt when there is actually unsaved typing to report -- not just
+        // because the form is in an editable state. Clicking "แก้ไขข้อมูล" (or
+        // "New Assessment") and leaving without changing anything is not an edit,
+        // so isDirty (set only by scheduleSave(), i.e. a real field-level change)
+        // stays false and no confirm shows.
+        if (this.currentView === 'view-app' && !this.isViewMode && this.isDirty) {
+            if (!confirm('ข้อมูลถูกบันทึกเป็น draft บนเครื่องนี้ ต้องการกลับสู่หน้าหลักหรือไม่?')) return;
+        }
         window.location.href = '/dashboard.html';
     },
 
@@ -134,7 +676,9 @@ export const appState = {
         let html = '';
         SDGs_LIST.forEach((sdg) => {
             const value = `SDG ${sdg.id}: ${sdg.title}`;
-            const search = `${sdg.id} ${sdg.title} ${sdg.focus}`.toLowerCase();
+            const targets = SDG_TARGETS[sdg.id] ?? [];
+            const targetSearch = targets.map(target => `${target.code} ${target.title}`).join(' ');
+            const search = `${sdg.id} ${sdg.title} ${sdg.focus} ${targetSearch}`.toLowerCase();
             html += `
                 <label class="cursor-pointer relative sdg-card" data-sdg-card data-search="${this.escapeHTML(search)}">
                     <input type="checkbox" class="sdg-checkbox peer sr-only" value="${this.escapeHTML(value)}" data-sdg-id="${sdg.id}">
@@ -153,10 +697,129 @@ export const appState = {
         container.innerHTML = html;
     },
 
+    parseObjectiveText(value) {
+        return String(value || '')
+            .split(/\n+/)
+            .map(item => item.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').trim())
+            .filter(Boolean);
+    },
+
+    renderObjectiveInputs(values = ['']) {
+        const container = document.getElementById('objective-list');
+        if (!container) return;
+
+        const objectiveValues = values.length ? values : [''];
+        container.innerHTML = objectiveValues.map((value, index) => `
+            <div class="objective-row">
+                <div class="objective-number">${index + 1}</div>
+                <textarea rows="2" class="objective-input form-control resize-none" placeholder="ระบุวัตถุประสงค์ข้อที่ ${index + 1}">${this.escapeHTML(value)}</textarea>
+                <button type="button" onclick="appState.removeObjective(this)" class="objective-remove-button" aria-label="ลบวัตถุประสงค์ข้อที่ ${index + 1}">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+        `).join('');
+        this.updateObjectiveHidden(false);
+        this.updateObjectiveRemoveButtons();
+    },
+
+    addObjective(value = '') {
+        if (this.isViewMode) return;
+        const values = this.getObjectiveValues();
+        values.push(value);
+        this.renderObjectiveInputs(values);
+        this.scheduleSave();
+        this.updateLiveSummary();
+
+        window.setTimeout(() => {
+            const inputs = document.querySelectorAll('.objective-input');
+            inputs[inputs.length - 1]?.focus();
+        }, 0);
+    },
+
+    removeObjective(button) {
+        if (this.isViewMode) return;
+        const row = button?.closest('.objective-row');
+        if (!row) return;
+        row.remove();
+        this.renumberObjectives();
+        this.updateObjectiveHidden();
+        this.updateObjectiveRemoveButtons();
+        this.scheduleSave();
+        this.updateLiveSummary();
+    },
+
+    getObjectiveValues(includeBlank = true) {
+        const values = Array.from(document.querySelectorAll('.objective-input')).map(input => input.value);
+        return includeBlank ? values : values.map(value => value.trim()).filter(Boolean);
+    },
+
+    updateObjectiveHidden(shouldRenumber = true) {
+        const hidden = document.getElementById('m_objective');
+        if (!hidden) return;
+        hidden.value = this.getObjectiveValues(false).join('\n');
+        if (shouldRenumber) this.renumberObjectives();
+    },
+
+    syncObjectivesFromHidden() {
+        const hidden = document.getElementById('m_objective');
+        const values = this.parseObjectiveText(hidden?.value);
+        this.renderObjectiveInputs(values.length ? values : ['']);
+    },
+
+    renumberObjectives() {
+        document.querySelectorAll('.objective-row').forEach((row, index) => {
+            row.querySelector('.objective-number').textContent = index + 1;
+            const input = row.querySelector('.objective-input');
+            const button = row.querySelector('.objective-remove-button');
+            if (input) input.placeholder = `ระบุวัตถุประสงค์ข้อที่ ${index + 1}`;
+            if (button) button.setAttribute('aria-label', `ลบวัตถุประสงค์ข้อที่ ${index + 1}`);
+        });
+    },
+
+    updateObjectiveRemoveButtons() {
+        const rows = document.querySelectorAll('.objective-row');
+        rows.forEach(row => {
+            const button = row.querySelector('.objective-remove-button');
+            if (!button) return;
+            button.disabled = rows.length <= 1 || this.isViewMode;
+            button.classList.toggle('opacity-40', button.disabled);
+            button.classList.toggle('cursor-not-allowed', button.disabled);
+        });
+    },
+
+    countWords(value) {
+        const text = String(value || '').trim();
+        if (!text) return 0;
+
+        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+            const segmenter = new Intl.Segmenter(['th', 'en'], { granularity: 'word' });
+            return Array.from(segmenter.segment(text)).filter(segment => segment.isWordLike).length;
+        }
+
+        return text.split(/\s+/).filter(Boolean).length;
+    },
+
+    updateKeyTakeawayCounter() {
+        const input = document.getElementById('sv_key_takeaway');
+        const counter = document.getElementById('sv_key_takeaway_counter');
+        const warning = document.getElementById('sv_key_takeaway_warning');
+        if (!input || !counter) return;
+
+        const limit = Number(input.dataset.wordLimit) || 80;
+        const count = this.countWords(input.value);
+        const overLimit = count > limit;
+        counter.textContent = `${count}/${limit} words`;
+        counter.classList.toggle('text-red-600', overLimit);
+        counter.classList.toggle('text-gray-400', !overLimit);
+        input.classList.toggle('border-red-300', overLimit);
+        input.classList.toggle('focus:ring-red-200', overLimit);
+        warning?.classList.toggle('hidden', !overLimit);
+    },
+
     renderStepper() {
         const container = document.getElementById('stepper-container').querySelector('.flex');
         let stepsHtml = '';
-        const stepNames = ["Metadata", "I1 SDGs", "I2/I3 Pathway", "S1 Evidence", "S2 SROI", "S3 Report"];
+        const stepNames = ["Metadata", "I-1 SDGs", "I-2/I-3 Pathway", "S-1 Evidence", "S-2 SROI", "S-3 Report"];
         
         for(let i=1; i<=this.totalSteps; i++) {
             stepsHtml += `
@@ -164,7 +827,7 @@ export const appState = {
                     <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm bg-white transition-colors duration-300 ${i===1 ? 'step-active' : 'step-inactive'}">
                         ${i}
                     </div>
-                    <span class="text-xs mt-2 font-medium ${i===1 ? 'text-chula' : 'text-gray-400'} hidden md:block text-center px-1">${stepNames[i-1]}</span>
+                    <span class="stepper-label text-xs mt-2 font-medium ${i===1 ? 'text-chula' : 'text-gray-400'} hidden md:block text-center px-1">${stepNames[i-1]}</span>
                 </div>
             `;
         }
@@ -172,24 +835,40 @@ export const appState = {
     },
 
     goToStep(step) {
-        if (this.isViewMode && step !== this.totalSteps) {
+        // While actively editing, step 6 (the finished report) is only reachable through
+        // the recheck-and-save flow, never by clicking the stepper directly -- otherwise
+        // unsaved changes could be "viewed" as a report without ever being persisted.
+        if (!this.isViewMode && step === this.totalSteps) {
+            return;
+        }
+
+        // Someone who COULD edit is nudged to press "แก้ไขข้อมูล" first (unchanged).
+        // Someone with view-only access is free to browse every step -- the inputs are
+        // disabled anyway, and there is no Edit button for them to press.
+        if (this.isViewMode && this.canEdit() && step !== this.totalSteps) {
             alert("กรุณากดปุ่ม 'แก้ไขข้อมูล' ก่อนทำการแก้ไข (Please click the Edit button before modifying data)");
             return;
         }
-        
+
         this.currentStep = step;
         this.updateStepUI();
         window.scrollTo({top: 0, behavior: 'smooth'});
     },
 
     enableEditMode() {
+        // The only way out of read-only, and it is reachable from an inline onclick
+        // via window.appState, so it must check for itself. A blocked write would
+        // otherwise only fail later, at save time, after the user had retyped everything.
+        if (!this.canEdit()) {
+            alert('คุณมีสิทธิ์ดูรายงานเท่านั้น (You have view-only access to this project)');
+            return;
+        }
+
         this.isViewMode = false;
-        
-        // 1. Automatically jump back to Step 1 so the user doesn't have to click the progress bar
         this.currentStep = 1;
-        this.updateStepUI(); 
-        
-        // 2. Force the browser to place the "blue cursor" inside the first text box instantly!
+        this.isDirty = false; // clicking Edit alone is not an edit -- goHome() checks this
+        this.updateStepUI();
+
         setTimeout(() => {
             const firstInput = document.getElementById('m_projectName');
             if (firstInput) {
@@ -206,13 +885,13 @@ export const appState = {
             
             if(i === this.currentStep) {
                 circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 step-active";
-                text.className = "text-xs mt-2 font-medium text-chula hidden md:block text-center px-1";
+                text.className = "stepper-label text-xs mt-2 font-medium text-chula hidden md:block text-center px-1";
             } else if (i < this.currentStep) {
                 circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 bg-chula-light border-chula-light text-white";
-                text.className = "text-xs mt-2 font-medium text-gray-600 hidden md:block text-center px-1";
+                text.className = "stepper-label text-xs mt-2 font-medium text-gray-600 hidden md:block text-center px-1";
             } else {
                 circle.className = "w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-colors duration-300 step-inactive";
-                text.className = "text-xs mt-2 font-medium text-gray-400 hidden md:block text-center px-1";
+                text.className = "stepper-label text-xs mt-2 font-medium text-gray-400 hidden md:block text-center px-1";
             }
         }
 
@@ -221,6 +900,8 @@ export const appState = {
 
         const btnPrev = document.getElementById('btn-prev');
         const btnNext = document.getElementById('btn-next');
+        const btnSaveStep = document.getElementById('btn-save-step');
+        const btnFinalSave = document.getElementById('btn-final-save');
         const formNav = document.getElementById('form-navigation');
 
         if (this.currentStep === 1) {
@@ -229,25 +910,38 @@ export const appState = {
             btnPrev.classList.remove('hidden');
         }
 
+        // Hidden on the report step: #report-container already leads with the project
+        // name, so the chip would just repeat it directly above.
+        const projectTitleChipBar = document.getElementById('project-title-chip-bar');
+        if (projectTitleChipBar) {
+            projectTitleChipBar.classList.toggle('hidden', this.currentStep === this.totalSteps);
+        }
+
         if (this.currentStep === this.totalSteps) {
             formNav.classList.add('hidden');
-            this.generateReport(); 
-            
-            // --- Toggle Save vs Edit Button ---
-            const btnSave = document.getElementById('btn-save-assessment');
-            if (btnSave) {
-                if (this.isViewMode) {
-                    btnSave.innerHTML = 'แก้ไขข้อมูล <i class="fa-solid fa-pen-to-square ml-2"></i>';
-                    btnSave.className = 'bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
-                    btnSave.setAttribute('onclick', 'appState.enableEditMode()');
-                } else {
-                    btnSave.innerHTML = 'บันทึกผลประเมิน <i class="fa-solid fa-floppy-disk ml-2"></i>';
-                    btnSave.className = 'bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4';
-                    btnSave.setAttribute('onclick', 'appState.confirmAndSave()');
-                }
+            this.generateReport();
+
+            // Step 6 is only ever reached after confirmAndSave() already ran from the
+            // step-5 recheck modal -- there is no save button here (see index.html).
+            // "แก้ไขข้อมูล" shows only for someone who may actually edit; a view-only
+            // visitor gets no edit affordance at all rather than a button that refuses.
+            const btnEdit = document.getElementById('btn-edit-assessment');
+            if (btnEdit) {
+                btnEdit.classList.toggle('hidden', !(this.isViewMode && this.canEdit()));
             }
         } else {
             formNav.classList.remove('hidden');
+
+            // On the last input step an editor gets "สรุปผลเป็นรายงาน" in place of
+            // "ถัดไป": it opens the recheck modal and saves, rather than silently
+            // walking onto a report of unsaved numbers. Read-only visitors keep plain
+            // "ถัดไป" -- they have nothing to commit, and step 6 stays reachable from
+            // the stepper for everyone either way.
+            const offerFinalSave = this.currentStep === this.totalSteps - 1 && !this.isViewMode;
+
+            if (btnFinalSave) btnFinalSave.classList.toggle('hidden', !offerFinalSave);
+            btnNext.classList.toggle('hidden', offerFinalSave);
+
             if (this.currentStep === this.totalSteps - 1) {
                 btnNext.innerHTML = 'ประมวลผลรายงาน <i class="fa-solid fa-file-invoice ml-2"></i>';
                 btnNext.classList.remove('bg-chula');
@@ -257,10 +951,27 @@ export const appState = {
                 btnNext.classList.add('bg-chula');
                 btnNext.classList.remove('bg-gray-900', 'hover:bg-black');
             }
+
+            // Nothing to save while read-only, so the button would only confuse.
+            //
+            // Visibility is driven by sm:flex, NOT by toggling 'hidden'. The button is
+            // desktop-only ('hidden sm:flex'), and Tailwind emits media-query utilities
+            // after the base ones -- so sm:flex beats 'hidden' above 640px and adding
+            // 'hidden' would fail to hide it on exactly the screens it shows on.
+            // Leaving 'hidden' permanently on and gating sm:flex gets both states right.
+            if (btnSaveStep) {
+                btnSaveStep.classList.add('hidden');
+                btnSaveStep.classList.toggle('sm:flex', !this.isViewMode);
+            }
         }
 
-        // Lock/unlock inputs based on View Mode
-        document.querySelectorAll('input, textarea, select').forEach(el => {
+        // Scoped to #view-app. This used to sweep the whole document, which now would
+        // also disable the login form and the researcher-management inputs.
+        // [data-readonly-exempt] opts a subtree out -- the member panel stays usable
+        // for an owner reading a saved report.
+        document.querySelectorAll('#view-app input, #view-app textarea, #view-app select').forEach(el => {
+            if (el.closest('[data-readonly-exempt]')) return;
+
             if (this.isViewMode) {
                 el.disabled = true;
                 el.readOnly = true;
@@ -288,7 +999,7 @@ export const appState = {
             }, 50);
         }
 
-        // Friend's UI Updates (Summary & Map)
+        this.updateObjectiveRemoveButtons();
         this.updateLiveSummary();
         if (this.currentStep === 1) {
             window.setTimeout(() => this.initAreaMap(), 0);
@@ -296,17 +1007,44 @@ export const appState = {
     },
 
     nextStep() {
-        if (this.currentStep < this.totalSteps) {
-            this.currentStep++;
-            this.updateStepUI();
-            window.scrollTo({top: 0, behavior: 'smooth'});
-            
-            const mockDataToSave = {
-                projectName: document.getElementById('m_projectName')?.value || "Untitled",
-                currentStep: this.currentStep
-            };
-            saveProjectData(mockDataToSave);
-        }
+        if (this.currentStep >= this.totalSteps) return;
+
+        this.currentStep++;
+        this.updateStepUI();
+        window.scrollTo({top: 0, behavior: 'smooth'});
+
+        // Local draft only. This used to call saveProjectData() with just
+        // { projectName, currentStep }, which overwrote the entire assessment_data
+        // column and destroyed every previously saved answer. Writes to the server
+        // are now only ever explicit, via confirmAndSave().
+        this.saveDraft();
+    },
+
+    // The autosave debounce and nextStep() both already write the draft, so this saves
+    // nothing new -- it exists so the user can SEE that their typing is safe without
+    // having to leave the step. Local draft only, like every other implicit write;
+    // reaching the database still takes confirmAndSave().
+    saveCurrentStepLocal() {
+        this.saveDraft();
+
+        const btn = document.getElementById('btn-save-step');
+        if (!btn) return;
+
+        // Guard against a double-click restoring the "Saved" label as the original.
+        if (btn.dataset.confirming === 'true') return;
+        btn.dataset.confirming = 'true';
+
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>บันทึกแล้ว (Saved)';
+        btn.classList.replace('text-chula', 'text-green-600');
+        btn.classList.replace('border-chula', 'border-green-600');
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.replace('text-green-600', 'text-chula');
+            btn.classList.replace('border-green-600', 'border-chula');
+            delete btn.dataset.confirming;
+        }, 2000);
     },
 
     prevStep() {
@@ -328,6 +1066,29 @@ export const appState = {
         });
     },
 
+    // Landing nav's "เกี่ยวกับระบบ" / "ช่วยเหลือ" links: open the About panel (it also
+    // holds the contact email) and scroll it into view, rather than pointing at pages
+    // that don't exist.
+    scrollToIntro() {
+        const details = document.getElementById('intro-details');
+        if (!details) return;
+        details.open = true;
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    // Landing page's collapsed "เกี่ยวกับระบบนี้" panel: one language block visible
+    // at a time instead of both full Thai and English copies stacked together.
+    showIntroLang(lang) {
+        document.querySelectorAll('[data-intro-lang]').forEach(panel => {
+            panel.classList.toggle('hidden', panel.dataset.introLang !== lang);
+        });
+        document.querySelectorAll('[data-intro-tab]').forEach(tab => {
+            const active = tab.dataset.introTab === lang;
+            tab.classList.toggle('framework-tab-active', active);
+            tab.classList.toggle('framework-tab-idle', !active);
+        });
+    },
+
     initAreaMap() {
         const mapEl = document.getElementById('area-map');
         if (!mapEl) return;
@@ -343,8 +1104,9 @@ export const appState = {
                 maxZoom: 19,
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(this.areaMap);
+            this.boundaryLayerGroup = window.L.layerGroup().addTo(this.areaMap);
             this.areaMap.on('click', (event) => {
-                if (this.mapSelectionMode === 'area') return;
+                if (this.mapSelectionMode !== 'pin') return;
 
                 this.setProjectLocation({
                     lat: event.latlng.lat,
@@ -373,17 +1135,22 @@ export const appState = {
     },
 
     setMapSelectionMode(mode, updateStatus = true) {
-        this.mapSelectionMode = mode === 'area' ? 'area' : 'pin';
+        this.mapSelectionMode = ['pin', 'area', 'boundary'].includes(mode) ? mode : 'pin';
         const typeInput = document.getElementById('m_location_type');
         if (typeInput && !this.getValue('m_lat')) typeInput.value = this.mapSelectionMode;
 
-        ['pin', 'area'].forEach(item => {
+        ['pin', 'area', 'boundary'].forEach(item => {
             const button = document.getElementById(`map-mode-${item}`);
             if (!button) return;
             const active = item === this.mapSelectionMode;
             button.classList.toggle('map-mode-button-active', active);
             button.classList.toggle('map-mode-button-idle', !active);
         });
+
+        const boundaryControls = document.getElementById('boundary-controls');
+        if (boundaryControls) {
+            boundaryControls.classList.toggle('hidden', this.mapSelectionMode !== 'boundary');
+        }
 
         const mapEl = document.getElementById('area-map');
         if (mapEl) mapEl.classList.toggle('area-map-draw-mode', this.mapSelectionMode === 'area');
@@ -399,9 +1166,23 @@ export const appState = {
             this.areaDragStart = null;
             this.isDrawingArea = false;
             if (updateStatus) this.setAreaMapStatus('โหมดกำหนดพื้นที่: ลากบนแผนที่เพื่อคลุมพื้นที่ดำเนินงาน');
-        } else if (updateStatus) {
-            this.setAreaMapStatus('โหมดปักหมุด: คลิกบนแผนที่เพื่อเลือกตำแหน่งโครงการ');
+        } else if (this.mapSelectionMode === 'boundary') {
+            this.areaDragStart = null;
+            this.isDrawingArea = false;
+            if (updateStatus) {
+                this.setAreaMapStatus('โหมดเลือกขอบเขต: พิมพ์ชื่อตำบล/อำเภอเพื่อค้นหาและวาง shape หรือกดรีเฟรช boundary layer');
+            }
+        } else {
+            document.getElementById('boundary-search-results')?.classList.add('hidden');
+            if (updateStatus) this.setAreaMapStatus('โหมดปักหมุด: คลิกบนแผนที่เพื่อเลือกตำแหน่งโครงการ');
         }
+    },
+
+    scheduleBoundaryAutoLoad() {
+        window.clearTimeout(this.boundaryAutoLoadTimer);
+        this.boundaryAutoLoadTimer = window.setTimeout(() => {
+            if (this.mapSelectionMode === 'boundary') this.loadVisibleBoundaries({ force: false });
+        }, 350);
     },
 
     parseBounds(boundingbox) {
@@ -466,6 +1247,624 @@ export const appState = {
             displayName: 'พื้นที่ที่กำหนดเอง',
             label: this.getValue('m_location_label') || 'พื้นที่ที่กำหนดเอง'
         });
+    },
+
+    getBoundaryCacheKey(bounds, adminLevel) {
+        const rounded = [bounds.south, bounds.west, bounds.north, bounds.east]
+            .map(value => Number(value).toFixed(3))
+            .join(',');
+        return `osm-boundaries:${adminLevel}:${rounded}`;
+    },
+
+    getBoundaryLevelLabel(adminLevel) {
+        if (String(adminLevel) === '6') return 'อำเภอ/เขต';
+        if (String(adminLevel) === '8') return 'ตำบล/แขวง';
+        return 'ขอบเขต';
+    },
+
+    getBoundaryQueryBounds() {
+        if (!this.areaMap) return null;
+        const bounds = this.areaMap.getBounds();
+        const south = bounds.getSouth();
+        const north = bounds.getNorth();
+        const west = bounds.getWest();
+        const east = bounds.getEast();
+        if (![south, north, west, east].every(Number.isFinite)) return null;
+        return { south, north, west, east };
+    },
+
+    buildBoundaryQuery(bounds, adminLevel) {
+        const levelMatcher = adminLevel === 'all' ? '^(6|8)$' : `^${adminLevel}$`;
+        return `
+            [out:json][timeout:25];
+            (
+              relation["boundary"="administrative"]["admin_level"~"${levelMatcher}"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
+            );
+            out body geom;
+        `;
+    },
+
+    async loadVisibleBoundaries({ force = true } = {}) {
+        if (!this.areaMap || !window.L) {
+            this.setAreaMapStatus('แผนที่ยังไม่พร้อม ลองเปิดขั้นตอนนี้ใหม่อีกครั้ง');
+            return;
+        }
+
+        this.setMapSelectionMode('boundary', false);
+        const bounds = this.getBoundaryQueryBounds();
+        const adminLevel = document.getElementById('boundary-admin-level')?.value || '8';
+        if (!bounds) return;
+
+        const latSpan = Math.abs(bounds.north - bounds.south);
+        const lngSpan = Math.abs(bounds.east - bounds.west);
+        if (latSpan > 1.2 || lngSpan > 1.2) {
+            this.setAreaMapStatus('ขอบเขตกว้างเกินไป กรุณาค้นหาพื้นที่หรือ zoom เข้าใกล้ก่อนโหลดตำบล/อำเภอ');
+            return;
+        }
+
+        const cacheKey = this.getBoundaryCacheKey(bounds, adminLevel);
+        if (!force && cacheKey === this.boundaryLastLoadKey && this.boundaryFeatureLookup.size > 0) {
+            this.setAreaMapStatus('Boundary layer ถูกวางอยู่แล้ว คลิก shape เพื่อเลือก/ยกเลิก หรือกดรีเฟรชหลังเลื่อนแผนที่');
+            return;
+        }
+        this.boundaryLastLoadKey = cacheKey;
+
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                const features = JSON.parse(cached);
+                this.renderBoundaryLayers(features);
+                this.setAreaMapStatus(`โหลดขอบเขตจาก cache ${features.length} รายการ คลิก shape เพื่อเลือก/ยกเลิก`);
+                return;
+            } catch (error) {
+                console.warn('Could not parse cached boundary result', error);
+            }
+        }
+
+        this.setAreaMapStatus('กำลังโหลดขอบเขตตำบล/อำเภอจาก OpenStreetMap...');
+        try {
+            const query = this.buildBoundaryQuery(bounds, adminLevel);
+            const response = await fetch(OVERPASS_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: `data=${encodeURIComponent(query)}`
+            });
+            if (!response.ok) throw new Error(`Overpass failed: ${response.status}`);
+
+            const data = await response.json();
+            const features = this.overpassToBoundaryFeatures(data)
+                .filter(feature => feature.geometry)
+                .sort((a, b) => {
+                    const levelDiff = Number(a.properties.adminLevel) - Number(b.properties.adminLevel);
+                    if (levelDiff !== 0) return levelDiff;
+                    return a.properties.name.localeCompare(b.properties.name, 'th');
+                });
+
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(features));
+            } catch (error) {
+                console.warn('Could not cache boundary result', error);
+            }
+            this.renderBoundaryLayers(features);
+            this.setAreaMapStatus(features.length
+                ? `พบขอบเขต ${features.length} รายการ คลิก shape เพื่อเลือกได้มากกว่า 1 ตำบล/อำเภอ`
+                : 'ไม่พบ boundary ในบริเวณนี้ ลอง zoom ออกเล็กน้อยหรือเปลี่ยนระดับขอบเขต');
+        } catch (error) {
+            console.warn(error);
+            this.setAreaMapStatus('โหลดขอบเขตไม่สำเร็จ ลองใหม่อีกครั้ง หรือใช้โหมดลากกำหนดพื้นที่แทน');
+        }
+    },
+
+    getBoundarySearchCacheKey(query, adminLevel) {
+        return `osm-boundary-search:${adminLevel}:${query.trim().toLowerCase()}`;
+    },
+
+    async searchBoundaryByName() {
+        const query = this.getValue('boundary-search').trim();
+        const adminLevel = document.getElementById('boundary-admin-level')?.value || '8';
+        if (!query) {
+            this.setAreaMapStatus('พิมพ์ชื่อตำบล/อำเภอก่อนค้นหา boundary');
+            return;
+        }
+
+        this.setMapSelectionMode('boundary');
+        const cacheKey = this.getBoundarySearchCacheKey(query, adminLevel);
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                this.boundarySearchResults = JSON.parse(cached);
+                this.renderBoundarySearchResults();
+                this.setAreaMapStatus(`พบ ${this.boundarySearchResults.length} boundary จาก cache`);
+                return;
+            } catch (error) {
+                console.warn('Could not parse cached boundary search', error);
+            }
+        }
+
+        this.setAreaMapStatus('กำลังค้นหา boundary shape จาก OpenStreetMap...');
+        try {
+            const params = new URLSearchParams({
+                format: 'jsonv2',
+                q: query,
+                countrycodes: 'th',
+                limit: '8',
+                'accept-language': 'th,en',
+                addressdetails: '1',
+                extratags: '1',
+                namedetails: '1',
+                polygon_geojson: '1'
+            });
+            const response = await fetch(`${OSM_SEARCH_ENDPOINT}?${params.toString()}`, {
+                headers: { Accept: 'application/json' }
+            });
+            if (!response.ok) throw new Error(`Boundary search failed: ${response.status}`);
+
+            const results = await response.json();
+            const features = (Array.isArray(results) ? results : [])
+                .map(result => this.nominatimResultToBoundaryFeature(result))
+                .filter(Boolean);
+            const wantedLevels = adminLevel === 'all' ? ['6', '8'] : [adminLevel];
+            const exactLevelFeatures = features.filter(feature => wantedLevels.includes(String(feature.properties.adminLevel)));
+            this.boundarySearchResults = (exactLevelFeatures.length ? exactLevelFeatures : features).slice(0, 6);
+
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(this.boundarySearchResults));
+            } catch (error) {
+                console.warn('Could not cache boundary search', error);
+            }
+
+            this.renderBoundarySearchResults();
+            this.setAreaMapStatus(this.boundarySearchResults.length
+                ? `พบ ${this.boundarySearchResults.length} boundary กด “วาง shape และเลือก” เพื่อเพิ่มลงแผนที่`
+                : 'ไม่พบ shape ของตำบล/อำเภอนี้ ลองเพิ่มคำว่า ตำบล/อำเภอ หรือชื่อจังหวัดต่อท้าย');
+        } catch (error) {
+            console.warn(error);
+            this.setAreaMapStatus('ค้นหา boundary ไม่สำเร็จ ลองพิมพ์ชื่อให้เฉพาะขึ้น หรือใช้โหมดรีเฟรช boundary layer');
+        }
+    },
+
+    nominatimResultToBoundaryFeature(result) {
+        const geometry = result?.geojson;
+        if (!geometry || !['Polygon', 'MultiPolygon'].includes(geometry.type)) return null;
+
+        const address = result.address ?? {};
+        const extratags = result.extratags ?? {};
+        const adminLevel = extratags.admin_level
+            || (address.subdistrict || address.suburb ? '8' : '')
+            || (address.district || address.city_district || address.county ? '6' : '');
+        const osmType = String(result.osm_type || 'osm').toLowerCase();
+        const osmId = result.osm_id || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const name = result.namedetails?.['name:th']
+            || result.name
+            || address.subdistrict
+            || address.suburb
+            || address.district
+            || address.city_district
+            || result.display_name
+            || `OSM ${osmId}`;
+
+        const feature = {
+            type: 'Feature',
+            properties: {
+                id: `${osmType}/${osmId}`,
+                osmId,
+                name,
+                displayName: result.display_name || name,
+                adminLevel,
+                levelLabel: this.getBoundaryLevelLabel(adminLevel)
+            },
+            geometry
+        };
+        feature.properties.bounds = this.getFeatureBounds(feature);
+        return feature;
+    },
+
+    renderBoundarySearchResults() {
+        const container = document.getElementById('boundary-search-results');
+        if (!container) return;
+
+        if (!this.boundarySearchResults.length) {
+            container.classList.add('hidden');
+            container.innerHTML = '';
+            return;
+        }
+
+        container.classList.remove('hidden');
+        container.innerHTML = this.boundarySearchResults.map((feature, index) => `
+            <div class="map-result boundary-search-result">
+                <span class="font-semibold text-gray-900">${this.escapeHTML(feature.properties.name)}</span>
+                <span class="text-xs text-gray-500">${this.escapeHTML(feature.properties.levelLabel || 'Boundary')} · ${this.escapeHTML(feature.properties.displayName || '')}</span>
+                <div class="map-result-actions">
+                    <button type="button" onclick="appState.selectBoundarySearchResult(${index})">
+                        <i class="fa-solid fa-draw-polygon mr-1"></i>วาง shape และเลือก
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    },
+
+    selectBoundarySearchResult(index) {
+        const feature = this.boundarySearchResults[index];
+        if (!feature) return;
+
+        this.setMapSelectionMode('boundary', false);
+        this.renderBoundaryLayers([feature], { clear: false });
+        if (!this.selectedBoundaryIds.has(feature.properties.id)) {
+            const next = this.getBoundarySelection().concat([this.boundarySelectionFromFeature(feature)]);
+            this.setBoundarySelection(next);
+            this.applyBoundarySelectionToFields();
+        }
+        this.updateBoundaryLayerStyles();
+        this.updateSelectedBoundaryList();
+
+        const bounds = feature.properties.bounds || this.getFeatureBounds(feature);
+        if (bounds && this.areaMap) {
+            this.areaMap.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]], { padding: [28, 28], maxZoom: 14 });
+        }
+
+        const resultsEl = document.getElementById('boundary-search-results');
+        if (resultsEl) resultsEl.classList.add('hidden');
+        this.setAreaMapStatus(`วาง shape “${feature.properties.name}” แล้ว คลิก shape เพื่อยกเลิก หรือค้นหาเพิ่มได้`);
+        this.scheduleSave();
+    },
+
+    overpassToBoundaryFeatures(data) {
+        const elements = Array.isArray(data?.elements) ? data.elements : [];
+        return elements
+            .filter(element => element.type === 'relation' && element.tags?.boundary === 'administrative')
+            .map(element => this.relationToBoundaryFeature(element))
+            .filter(Boolean);
+    },
+
+    relationToBoundaryFeature(element) {
+        const outerLines = (element.members ?? [])
+            .filter(member => member.type === 'way' && member.role !== 'inner' && Array.isArray(member.geometry) && member.geometry.length >= 2)
+            .map(member => member.geometry.map(point => [Number(point.lon), Number(point.lat)]));
+
+        const outerRings = this.stitchBoundaryRings(outerLines);
+        if (outerRings.length === 0) return null;
+
+        const name = element.tags?.['name:th'] || element.tags?.name || element.tags?.['name:en'] || `OSM relation ${element.id}`;
+        const adminLevel = element.tags?.admin_level || '';
+        const id = `relation/${element.id}`;
+        const polygons = outerRings.map(ring => [ring]);
+        const geometry = polygons.length === 1
+            ? { type: 'Polygon', coordinates: polygons[0] }
+            : { type: 'MultiPolygon', coordinates: polygons };
+
+        const feature = {
+            type: 'Feature',
+            properties: {
+                id,
+                osmId: element.id,
+                name,
+                adminLevel,
+                levelLabel: this.getBoundaryLevelLabel(adminLevel)
+            },
+            geometry
+        };
+        feature.properties.bounds = this.getFeatureBounds(feature);
+        return feature;
+    },
+
+    stitchBoundaryRings(lines) {
+        const remaining = lines
+            .filter(line => line.length >= 2)
+            .map(line => line.map(coord => [coord[0], coord[1]]));
+        const rings = [];
+
+        while (remaining.length) {
+            let ring = remaining.shift();
+            let changed = true;
+
+            while (changed && !this.isClosedRing(ring)) {
+                changed = false;
+                for (let index = 0; index < remaining.length; index++) {
+                    const line = remaining[index];
+                    const first = ring[0];
+                    const last = ring[ring.length - 1];
+                    const lineFirst = line[0];
+                    const lineLast = line[line.length - 1];
+
+                    if (this.sameCoord(last, lineFirst)) {
+                        ring = ring.concat(line.slice(1));
+                    } else if (this.sameCoord(last, lineLast)) {
+                        ring = ring.concat([...line].reverse().slice(1));
+                    } else if (this.sameCoord(first, lineLast)) {
+                        ring = line.slice(0, -1).concat(ring);
+                    } else if (this.sameCoord(first, lineFirst)) {
+                        ring = [...line].reverse().slice(0, -1).concat(ring);
+                    } else {
+                        continue;
+                    }
+
+                    remaining.splice(index, 1);
+                    changed = true;
+                    break;
+                }
+            }
+
+            if (!this.isClosedRing(ring) && ring.length >= 3) ring = ring.concat([ring[0]]);
+            if (ring.length >= 4 && this.isClosedRing(ring)) rings.push(ring);
+        }
+
+        return rings;
+    },
+
+    sameCoord(a, b) {
+        if (!a || !b) return false;
+        return Math.abs(a[0] - b[0]) < 0.0000001 && Math.abs(a[1] - b[1]) < 0.0000001;
+    },
+
+    isClosedRing(ring) {
+        return ring.length >= 4 && this.sameCoord(ring[0], ring[ring.length - 1]);
+    },
+
+    getFeatureBounds(feature) {
+        const coords = [];
+        const collect = value => {
+            if (!Array.isArray(value)) return;
+            if (typeof value[0] === 'number' && typeof value[1] === 'number') {
+                coords.push(value);
+                return;
+            }
+            value.forEach(collect);
+        };
+        collect(feature.geometry?.coordinates);
+        if (!coords.length) return null;
+
+        const lngs = coords.map(coord => coord[0]);
+        const lats = coords.map(coord => coord[1]);
+        return {
+            south: Math.min(...lats),
+            north: Math.max(...lats),
+            west: Math.min(...lngs),
+            east: Math.max(...lngs)
+        };
+    },
+
+    getBoundaryStyle(feature) {
+        const selected = this.selectedBoundaryIds.has(feature.properties.id);
+        return {
+            color: selected ? '#e11d48' : '#2563eb',
+            weight: selected ? 5 : 2,
+            fillColor: selected ? '#fb7185' : '#60a5fa',
+            fillOpacity: selected ? 0.42 : 0.12,
+            opacity: selected ? 1 : 0.75,
+            dashArray: selected ? '' : '6 4'
+        };
+    },
+
+    renderBoundaryLayers(features, { clear = true, fitSelected = false } = {}) {
+        if (!this.areaMap || !window.L) return;
+        if (!this.boundaryLayerGroup) this.boundaryLayerGroup = window.L.layerGroup().addTo(this.areaMap);
+        if (clear) {
+            this.boundaryLayerGroup.clearLayers();
+            this.boundaryFeatureLookup = new Map();
+        }
+
+        const selected = this.getBoundarySelection();
+        const featureIds = new Set(features.map(feature => feature.properties.id));
+        const combinedFeatures = features.concat(selected
+            .filter(item => item.geometry && !featureIds.has(item.id))
+            .map(item => this.boundarySelectionToFeature(item)));
+
+        combinedFeatures.forEach(feature => {
+            if (!feature?.geometry || this.boundaryFeatureLookup.has(feature.properties.id)) return;
+            this.boundaryFeatureLookup.set(feature.properties.id, feature);
+            const layer = window.L.geoJSON(feature, {
+                style: item => this.getBoundaryStyle(item),
+                onEachFeature: (item, itemLayer) => {
+                    itemLayer.on('click', event => {
+                        window.L.DomEvent.stopPropagation(event);
+                        this.toggleBoundarySelection(item);
+                    });
+                    itemLayer.bindTooltip(`${item.properties.levelLabel}: ${item.properties.name}`, {
+                        sticky: true,
+                        direction: 'top'
+                    });
+                }
+            });
+            layer.addTo(this.boundaryLayerGroup);
+        });
+
+        this.updateBoundaryLayerStyles();
+        this.updateSelectedBoundaryList();
+
+        if (fitSelected && selected.length) {
+            const bounds = this.getAggregateBounds(selected);
+            if (bounds) this.areaMap.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]], { padding: [24, 24], maxZoom: 14 });
+        }
+    },
+
+    boundarySelectionFromFeature(feature) {
+        return {
+            id: feature.properties.id,
+            osmId: feature.properties.osmId,
+            name: feature.properties.name,
+            adminLevel: feature.properties.adminLevel,
+            levelLabel: feature.properties.levelLabel,
+            bounds: feature.properties.bounds || this.getFeatureBounds(feature),
+            geometry: feature.geometry
+        };
+    },
+
+    boundarySelectionToFeature(item) {
+        return {
+            type: 'Feature',
+            properties: {
+                id: item.id,
+                osmId: item.osmId,
+                name: item.name,
+                adminLevel: item.adminLevel,
+                levelLabel: item.levelLabel || this.getBoundaryLevelLabel(item.adminLevel),
+                bounds: item.bounds
+            },
+            geometry: item.geometry
+        };
+    },
+
+    getBoundarySelection() {
+        const field = document.getElementById('m_boundary_selection_json');
+        if (!field?.value) return [];
+        try {
+            const parsed = JSON.parse(field.value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            console.warn('Could not parse selected boundaries', error);
+            return [];
+        }
+    },
+
+    setBoundarySelection(selection) {
+        const field = document.getElementById('m_boundary_selection_json');
+        if (field) field.value = JSON.stringify(selection ?? []);
+        this.selectedBoundaryIds = new Set((selection ?? []).map(item => item.id));
+    },
+
+    toggleBoundarySelection(feature) {
+        if (this.isViewMode) return;
+        const current = this.getBoundarySelection();
+        const id = feature.properties.id;
+        const exists = current.some(item => item.id === id);
+        const next = exists
+            ? current.filter(item => item.id !== id)
+            : current.concat([this.boundarySelectionFromFeature(feature)]);
+
+        this.setBoundarySelection(next);
+        this.applyBoundarySelectionToFields();
+        this.updateBoundaryLayerStyles();
+        this.updateSelectedBoundaryList();
+        this.scheduleSave();
+        this.updateLiveSummary();
+    },
+
+    removeBoundarySelection(id) {
+        if (this.isViewMode) return;
+        const next = this.getBoundarySelection().filter(item => item.id !== id);
+        this.setBoundarySelection(next);
+        this.applyBoundarySelectionToFields();
+        this.updateBoundaryLayerStyles();
+        this.updateSelectedBoundaryList();
+        this.scheduleSave();
+    },
+
+    clearBoundarySelection(updateFields = true) {
+        this.setBoundarySelection([]);
+        this.updateBoundaryLayerStyles();
+        this.updateSelectedBoundaryList();
+        if (updateFields) this.applyBoundarySelectionToFields();
+    },
+
+    updateBoundaryLayerStyles() {
+        if (!this.boundaryLayerGroup) return;
+        this.boundaryLayerGroup.eachLayer(layer => {
+            layer.eachLayer?.(itemLayer => {
+                if (itemLayer.feature && itemLayer.setStyle) {
+                    itemLayer.setStyle(this.getBoundaryStyle(itemLayer.feature));
+                }
+            });
+        });
+    },
+
+    updateSelectedBoundaryList() {
+        const container = document.getElementById('selected-boundary-list');
+        if (!container) return;
+        const selected = this.getBoundarySelection();
+
+        if (!selected.length) {
+            container.classList.add('hidden');
+            container.innerHTML = '';
+            return;
+        }
+
+        container.classList.remove('hidden');
+        container.innerHTML = `
+            <div class="boundary-selection-title">
+                <i class="fa-solid fa-draw-polygon text-chula"></i>
+                เลือกแล้ว ${selected.length} พื้นที่
+            </div>
+            <div class="boundary-selection-chips">
+                ${selected.map(item => `
+                    <span class="boundary-chip">
+                        <span>${this.escapeHTML(item.levelLabel || this.getBoundaryLevelLabel(item.adminLevel))}: ${this.escapeHTML(item.name)}</span>
+                        <button type="button" onclick="appState.removeBoundarySelection('${this.escapeHTML(item.id)}')" aria-label="ลบ ${this.escapeHTML(item.name)}">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </span>
+                `).join('')}
+            </div>
+        `;
+    },
+
+    getAggregateBounds(items) {
+        const bounds = items.map(item => item.bounds).filter(Boolean);
+        if (!bounds.length) return null;
+        return {
+            south: Math.min(...bounds.map(item => Number(item.south))),
+            north: Math.max(...bounds.map(item => Number(item.north))),
+            west: Math.min(...bounds.map(item => Number(item.west))),
+            east: Math.max(...bounds.map(item => Number(item.east)))
+        };
+    },
+
+    applyBoundarySelectionToFields() {
+        const selected = this.getBoundarySelection();
+        const typeInput = document.getElementById('m_location_type');
+
+        if (!selected.length) {
+            if (typeInput) typeInput.value = this.mapSelectionMode;
+            ['m_area', 'm_lat', 'm_lng', 'm_place_name', 'm_osm_id', 'm_bounds_south', 'm_bounds_north', 'm_bounds_west', 'm_bounds_east'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.value = '';
+            });
+            this.updateAreaLocationUI();
+            this.setAreaMapStatus('ยังไม่ได้เลือก boundary คลิก shape เพื่อเลือกตำบล/อำเภอได้มากกว่า 1 พื้นที่');
+            return;
+        }
+
+        const names = selected.map(item => item.name).join(', ');
+        const bounds = this.getAggregateBounds(selected);
+        if (!bounds) return;
+
+        if (this.areaMarker && this.areaMap) {
+            this.areaMap.removeLayer(this.areaMarker);
+            this.areaMarker = null;
+        }
+        if (this.areaRectangle && this.areaMap) {
+            this.areaMap.removeLayer(this.areaRectangle);
+            this.areaRectangle = null;
+        }
+
+        const areaInput = document.getElementById('m_area');
+        const latInput = document.getElementById('m_lat');
+        const lngInput = document.getElementById('m_lng');
+        const placeInput = document.getElementById('m_place_name');
+        const labelInput = document.getElementById('m_location_label');
+        const osmIdInput = document.getElementById('m_osm_id');
+        const centerLat = (bounds.south + bounds.north) / 2;
+        const centerLng = (bounds.west + bounds.east) / 2;
+
+        if (areaInput) areaInput.value = names;
+        if (latInput) latInput.value = centerLat.toFixed(6);
+        if (lngInput) lngInput.value = centerLng.toFixed(6);
+        if (placeInput) placeInput.value = names;
+        if (labelInput && !labelInput.value.trim()) labelInput.value = names;
+        if (osmIdInput) osmIdInput.value = selected.map(item => item.osmId).filter(Boolean).join(',');
+        if (typeInput) typeInput.value = 'boundary';
+        this.setBoundsFields(bounds);
+        this.setMapSelectionMode('boundary', false);
+        this.updateAreaLocationUI();
+        this.setAreaMapStatus(`เลือก boundary แล้ว ${selected.length} พื้นที่ คลิกซ้ำเพื่อยกเลิก`);
+    },
+
+    syncBoundarySelectionFromFields() {
+        const selected = this.getBoundarySelection();
+        this.selectedBoundaryIds = new Set(selected.map(item => item.id));
+        this.updateSelectedBoundaryList();
     },
 
     getGeocodeCacheKey(query) {
@@ -597,6 +1996,7 @@ export const appState = {
         if (labelInput && !labelInput.value.trim()) labelInput.value = location.label || displayName;
         if (typeInput) typeInput.value = 'pin';
         this.setMapSelectionMode('pin', false);
+        this.clearBoundarySelection(false);
         this.clearAreaBounds(false);
 
         this.setAreaMarker(lat, lng, this.getSelectedLocationLabel(displayName), location.boundingbox);
@@ -629,6 +2029,7 @@ export const appState = {
         if (labelInput && !labelInput.value.trim()) labelInput.value = area.label || displayName;
         if (typeInput) typeInput.value = 'area';
         this.setMapSelectionMode('area', false);
+        this.clearBoundarySelection(false);
         this.setBoundsFields(bounds);
         this.setAreaRectangle(bounds, this.getSelectedLocationLabel(displayName));
         this.updateAreaLocationUI();
@@ -752,7 +2153,12 @@ export const appState = {
         const bounds = this.getBoundsFromFields();
         const type = this.getValue('m_location_type') || (bounds ? 'area' : 'pin');
 
-        if (lat && lng && type === 'area' && bounds) {
+        if (type === 'boundary') {
+            this.setMapSelectionMode('boundary', false);
+            this.syncBoundarySelectionFromFields();
+            const selected = this.getBoundarySelection();
+            if (selected.length) this.renderBoundaryLayers([], { clear: true, fitSelected: true });
+        } else if (lat && lng && type === 'area' && bounds) {
             this.setMapSelectionMode('area', false);
             this.setAreaRectangle(bounds, label);
         } else if (lat && lng) {
@@ -772,6 +2178,20 @@ export const appState = {
         const type = this.getValue('m_location_type') || 'pin';
         const bounds = this.getBoundsFromFields();
 
+        const selectedBoundaries = this.getBoundarySelection();
+        if (type === 'boundary' && selectedBoundaries.length) {
+            container.innerHTML = `
+                <div>
+                    <p class="font-semibold text-gray-900">${this.escapeHTML(label || `${selectedBoundaries.length} พื้นที่`)}</p>
+                    <p class="text-xs text-gray-500">ขอบเขตตำบล/อำเภอ · เลือก ${selectedBoundaries.length} พื้นที่</p>
+                    <p class="text-xs text-gray-500">${this.escapeHTML(selectedBoundaries.map(item => item.name).join(', '))}</p>
+                    ${bounds ? `<p class="text-xs text-gray-500">SW ${bounds.south.toFixed(4)}, ${bounds.west.toFixed(4)} · NE ${bounds.north.toFixed(4)}, ${bounds.east.toFixed(4)}</p>` : ''}
+                </div>
+                ${lat && lng ? `<a href="${this.getOSMLink(lat, lng)}" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-chula hover:underline">เปิดใน OSM</a>` : ''}
+            `;
+            return;
+        }
+
         if (!lat || !lng) {
             container.innerHTML = '<i class="fa-solid fa-circle-info mr-1"></i>ยังไม่ได้เลือกตำแหน่ง';
             return;
@@ -789,10 +2209,13 @@ export const appState = {
     },
 
     clearAreaLocation() {
-        ['m_lat', 'm_lng', 'm_place_name', 'm_osm_id', 'm_location_label', 'm_bounds_south', 'm_bounds_north', 'm_bounds_west', 'm_bounds_east'].forEach(id => {
+        ['m_lat', 'm_lng', 'm_place_name', 'm_osm_id', 'm_location_label', 'm_bounds_south', 'm_bounds_north', 'm_bounds_west', 'm_bounds_east', 'm_boundary_selection_json'].forEach(id => {
             const element = document.getElementById(id);
-            if (element) element.value = '';
+            if (element) element.value = id === 'm_boundary_selection_json' ? '[]' : '';
         });
+        this.selectedBoundaryIds = new Set();
+        this.updateBoundaryLayerStyles();
+        this.updateSelectedBoundaryList();
         const typeInput = document.getElementById('m_location_type');
         if (typeInput) typeInput.value = this.mapSelectionMode;
         if (this.areaMarker && this.areaMap) {
@@ -817,20 +2240,257 @@ export const appState = {
         return `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat)}&mlon=${encodeURIComponent(lng)}#map=15/${encodeURIComponent(lat)}/${encodeURIComponent(lng)}`;
     },
 
-    previewImage(event) {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                this.uploadedImage = e.target.result;
-                const preview = document.getElementById('photo-preview');
-                preview.src = this.uploadedImage;
-                preview.classList.remove('hidden');
-                document.getElementById('photo-placeholder').classList.add('hidden');
+    createActivityImage(overrides = {}) {
+        const legacyCrop = this.getLegacyCropPercent(overrides.cropPosition);
+        return {
+            src: overrides.src || '',
+            name: overrides.name || '',
+            size: overrides.size || 0,
+            width: overrides.width || 0,
+            height: overrides.height || 0,
+            cropPosition: overrides.cropPosition || 'custom',
+            cropX: this.clampCropValue(overrides.cropX ?? legacyCrop.x),
+            cropY: this.clampCropValue(overrides.cropY ?? legacyCrop.y)
+        };
+    },
+
+    normaliseActivityImages(images = []) {
+        return Array.from({ length: 6 }, (_, index) => this.createActivityImage(images[index] || {}));
+    },
+
+    renderActivityPhotoSlots() {
+        const container = document.getElementById('activity-photo-grid');
+        if (!container) return;
+
+        this.activityImages = this.normaliseActivityImages(this.activityImages);
+        container.innerHTML = this.activityImages.map((image, index) => {
+            const hasImage = Boolean(image.src);
+            const crop = this.getActivityCropPercent(image);
+            return `
+                <div class="activity-photo-slot ${hasImage ? 'activity-photo-slot-filled' : ''}" data-photo-slot="${index}">
+                    <input type="file" id="sv_photo_${index + 1}" accept="image/*" class="sr-only" onchange="appState.handleActivityPhotoUpload(event, ${index})">
+                    ${hasImage
+                        ? `<div class="activity-photo-frame activity-photo-crop-frame" onpointerdown="appState.startActivityCropDrag(event, ${index})" role="group" aria-label="จัดตำแหน่งครอปภาพกิจกรรม ${index + 1}">
+                            <img src="${this.escapeHTML(image.src)}" alt="ภาพกิจกรรม ${index + 1}" draggable="false" style="object-position:${this.getCropObjectPosition(image)}">
+                            <span class="activity-crop-focus" style="left:${crop.x}%; top:${crop.y}%"></span>
+                        </div>`
+                        : `<label class="activity-photo-frame" for="sv_photo_${index + 1}">
+                            <div class="activity-photo-placeholder">
+                                <i class="fa-solid fa-image"></i>
+                                <span>รูปที่ ${index + 1}</span>
+                                <small>3:2 แนวนอน</small>
+                            </div>
+                        </label>`
+                    }
+                    <div class="activity-photo-meta">
+                        <div class="min-w-0">
+                            <p class="activity-photo-title">${hasImage ? this.escapeHTML(image.name || `ภาพกิจกรรม ${index + 1}`) : `ภาพกิจกรรม ${index + 1}`}</p>
+                            <p class="activity-photo-detail">${hasImage ? this.getActivityImageDetail(image) : 'แนะนำ 1200×800px ขึ้นไป'}</p>
+                        </div>
+                        ${hasImage
+                            ? `<div class="activity-photo-actions">
+                                <label class="activity-photo-action" for="sv_photo_${index + 1}" aria-label="เปลี่ยนภาพกิจกรรม ${index + 1}">
+                                    <i class="fa-solid fa-arrow-rotate-right"></i>
+                                </label>
+                                <button type="button" class="activity-photo-remove" onclick="appState.removeActivityPhoto(${index})" aria-label="ลบภาพกิจกรรม ${index + 1}">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>`
+                            : ''
+                        }
+                    </div>
+                    <div class="activity-photo-crop ${hasImage ? '' : 'hidden'}">
+                        <div class="activity-photo-crop-label">
+                            <i class="fa-solid fa-crop-simple"></i>
+                            <span>ตำแหน่งครอป</span>
+                        </div>
+                        <label class="activity-photo-slider">
+                            <span>แนวนอน</span>
+                            <input type="range" id="sv_photo_crop_x_${index + 1}" min="0" max="100" value="${crop.x}" oninput="appState.updateActivityPhotoCrop(${index}, 'x', this.value)" onchange="appState.scheduleSave()">
+                        </label>
+                        <label class="activity-photo-slider">
+                            <span>แนวตั้ง</span>
+                            <input type="range" id="sv_photo_crop_y_${index + 1}" min="0" max="100" value="${crop.y}" oninput="appState.updateActivityPhotoCrop(${index}, 'y', this.value)" onchange="appState.scheduleSave()">
+                        </label>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        this.updateActivityPhotoCount();
+    },
+
+    getLegacyCropPercent(position) {
+        return {
+            top: { x: 50, y: 0 },
+            bottom: { x: 50, y: 100 },
+            left: { x: 0, y: 50 },
+            right: { x: 100, y: 50 },
+            center: { x: 50, y: 50 },
+            custom: { x: 50, y: 50 }
+        }[position] || { x: 50, y: 50 };
+    },
+
+    clampCropValue(value, fallback = 50) {
+        const number = Number.parseFloat(value);
+        if (!Number.isFinite(number)) return fallback;
+        return Math.min(100, Math.max(0, Math.round(number)));
+    },
+
+    getActivityCropPercent(image = {}) {
+        const legacyCrop = this.getLegacyCropPercent(image.cropPosition);
+        return {
+            x: this.clampCropValue(image.cropX ?? legacyCrop.x),
+            y: this.clampCropValue(image.cropY ?? legacyCrop.y)
+        };
+    },
+
+    getCropObjectPosition(image) {
+        const crop = typeof image === 'string'
+            ? this.getLegacyCropPercent(image)
+            : this.getActivityCropPercent(image);
+        return `${crop.x}% ${crop.y}%`;
+    },
+
+    updateActivityCropUI(index) {
+        const image = this.activityImages[index];
+        if (!image?.src) return;
+
+        const crop = this.getActivityCropPercent(image);
+        const slot = document.querySelector(`[data-photo-slot="${index}"]`);
+        slot?.querySelector('.activity-photo-crop-frame img')?.style.setProperty('object-position', `${crop.x}% ${crop.y}%`);
+        const focus = slot?.querySelector('.activity-crop-focus');
+        if (focus) {
+            focus.style.left = `${crop.x}%`;
+            focus.style.top = `${crop.y}%`;
+        }
+
+        const xSlider = document.getElementById(`sv_photo_crop_x_${index + 1}`);
+        const ySlider = document.getElementById(`sv_photo_crop_y_${index + 1}`);
+        if (xSlider) xSlider.value = crop.x;
+        if (ySlider) ySlider.value = crop.y;
+    },
+
+    setActivityPhotoCrop(index, cropX, cropY, shouldSave = true) {
+        if (this.isViewMode) return;
+        this.activityImages = this.normaliseActivityImages(this.activityImages);
+        if (!this.activityImages[index]?.src) return;
+
+        this.activityImages[index].cropX = this.clampCropValue(cropX, this.activityImages[index].cropX);
+        this.activityImages[index].cropY = this.clampCropValue(cropY, this.activityImages[index].cropY);
+        this.activityImages[index].cropPosition = 'custom';
+        this.updateActivityCropUI(index);
+        if (shouldSave) this.scheduleSave();
+    },
+
+    startActivityCropDrag(event, index) {
+        if (this.isViewMode || event.pointerType === 'mouse' && event.button !== 0) return;
+
+        const frame = event.currentTarget;
+        const moveCrop = pointerEvent => {
+            const rect = frame.getBoundingClientRect();
+            const x = ((pointerEvent.clientX - rect.left) / rect.width) * 100;
+            const y = ((pointerEvent.clientY - rect.top) / rect.height) * 100;
+            this.setActivityPhotoCrop(index, x, y, false);
+        };
+
+        event.preventDefault();
+        frame.setPointerCapture?.(event.pointerId);
+        frame.classList.add('activity-photo-crop-frame-active');
+        moveCrop(event);
+
+        const finish = () => {
+            frame.classList.remove('activity-photo-crop-frame-active');
+            frame.releasePointerCapture?.(event.pointerId);
+            frame.removeEventListener('pointermove', moveCrop);
+            frame.removeEventListener('pointerup', finish);
+            frame.removeEventListener('pointercancel', finish);
+            this.scheduleSave();
+        };
+
+        frame.addEventListener('pointermove', moveCrop);
+        frame.addEventListener('pointerup', finish);
+        frame.addEventListener('pointercancel', finish);
+    },
+
+    getActivityImageDetail(image) {
+        const sizeKb = image.size ? `${Math.round(image.size / 1024).toLocaleString()} KB` : '';
+        const dimensions = image.width && image.height ? `${image.width}×${image.height}px` : '';
+        const ratioWarning = image.width && image.height && Math.abs((image.width / image.height) - 1.5) > 0.08
+            ? ' · จะถูกครอปเข้า 3:2'
+            : '';
+        return [dimensions, sizeKb].filter(Boolean).join(' · ') + ratioWarning;
+    },
+
+    updateActivityPhotoCount() {
+        const counter = document.getElementById('activity-photo-count');
+        if (!counter) return;
+        const count = this.activityImages.filter(image => image.src).length;
+        counter.textContent = `${count}/6 รูป`;
+        counter.classList.toggle('activity-photo-count-complete', count === 6);
+    },
+
+    handleActivityPhotoUpload(event, index) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const src = String(reader.result || '');
+            const probe = new Image();
+            probe.onload = () => {
+                this.activityImages = this.normaliseActivityImages(this.activityImages);
+                this.activityImages[index] = this.createActivityImage({
+                    src,
+                    name: file.name,
+                    size: file.size,
+                    width: probe.naturalWidth,
+                    height: probe.naturalHeight,
+                    cropPosition: 'custom',
+                    cropX: 50,
+                    cropY: 50
+                });
+                this.uploadedImage = this.activityImages.find(image => image.src)?.src || null;
+                this.renderActivityPhotoSlots();
                 this.scheduleSave();
                 this.updateLiveSummary();
             };
-            reader.readAsDataURL(file);
+            probe.src = src;
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+    },
+
+    removeActivityPhoto(index) {
+        if (this.isViewMode) return;
+        this.activityImages = this.normaliseActivityImages(this.activityImages);
+        this.activityImages[index] = this.createActivityImage();
+        this.uploadedImage = this.activityImages.find(image => image.src)?.src || null;
+        this.renderActivityPhotoSlots();
+        this.scheduleSave();
+    },
+
+    updateActivityPhotoCrop(index, axis, value) {
+        if (this.isViewMode) return;
+        this.activityImages = this.normaliseActivityImages(this.activityImages);
+        if (!this.activityImages[index]?.src) return;
+
+        if (axis === 'x') {
+            this.setActivityPhotoCrop(index, value, this.activityImages[index].cropY, false);
+            return;
+        }
+        if (axis === 'y') {
+            this.setActivityPhotoCrop(index, this.activityImages[index].cropX, value, false);
+            return;
+        }
+
+        const crop = this.getLegacyCropPercent(axis);
+        this.setActivityPhotoCrop(index, crop.x, crop.y);
+    },
+
+    previewImage(event) {
+        const file = event.target.files[0];
+        if (file) {
+            this.handleActivityPhotoUpload(event, 0);
         }
     },
 
@@ -849,6 +2509,92 @@ export const appState = {
         this.updateLiveSummary();
     },
 
+    getSDGTargetsState() {
+        const hidden = document.getElementById('sdg_targets_json');
+        if (!hidden?.value) return {};
+
+        try {
+            const parsed = JSON.parse(hidden.value);
+            if (!parsed || typeof parsed !== 'object') return {};
+            return Object.fromEntries(Object.entries(parsed).map(([sdgId, targets]) => [
+                sdgId,
+                Array.isArray(targets) ? targets.filter(Boolean) : []
+            ]));
+        } catch (error) {
+            console.warn('Could not parse SDG targets', error);
+            return {};
+        }
+    },
+
+    setSDGTargetsState(targetsBySDG) {
+        const hidden = document.getElementById('sdg_targets_json');
+        if (!hidden) return;
+        hidden.value = JSON.stringify(targetsBySDG ?? {});
+    },
+
+    collectVisibleSDGTargets(fallback = {}) {
+        const targetsBySDG = { ...fallback };
+        document.querySelectorAll('.sdg-target-checkbox').forEach(input => {
+            const sdgId = input.dataset.sdgId;
+            if (!sdgId) return;
+            if (!targetsBySDG[sdgId]) targetsBySDG[sdgId] = [];
+            if (input.checked && !targetsBySDG[sdgId].includes(input.value)) {
+                targetsBySDG[sdgId].push(input.value);
+            }
+        });
+        return targetsBySDG;
+    },
+
+    filterSDGTargetsToSelected(targetsBySDG, selectedIds) {
+        const selectedSet = new Set(selectedIds.map(String));
+        return Object.fromEntries(Object.entries(targetsBySDG ?? {})
+            .filter(([sdgId]) => selectedSet.has(String(sdgId)))
+            .map(([sdgId, targets]) => [sdgId, Array.from(new Set(targets ?? []))]));
+    },
+
+    updateSDGTargetsHidden() {
+        const selectedIds = Array.from(document.querySelectorAll('.sdg-checkbox:checked'), cb => cb.dataset.sdgId);
+        const targetsBySDG = this.filterSDGTargetsToSelected(this.collectVisibleSDGTargets({}), selectedIds);
+        this.setSDGTargetsState(targetsBySDG);
+        this.updateSDGTargetCounts();
+    },
+
+    updateSDGTargetCounts() {
+        const targetsBySDG = this.getSDGTargetsState();
+        document.querySelectorAll('[data-sdg-target-count]').forEach(el => {
+            const count = targetsBySDG[el.dataset.sdgId]?.length ?? 0;
+            el.textContent = count ? `${count} selected` : 'optional';
+        });
+    },
+
+    renderSDGTargetOptions(sdg, selectedTargets) {
+        const targets = SDG_TARGETS[sdg.id] ?? [];
+        if (targets.length === 0) return '';
+
+        const targetList = targets.map(target => {
+            const checked = selectedTargets.has(target.code) ? 'checked' : '';
+            return `
+                <label class="sdg-target-option">
+                    <input type="checkbox" class="sdg-target-checkbox" data-sdg-id="${sdg.id}" value="${this.escapeHTML(target.code)}" ${checked}>
+                    <span>
+                        <strong>${this.escapeHTML(target.code)}</strong>
+                        ${this.escapeHTML(target.title)}
+                    </span>
+                </label>
+            `;
+        }).join('');
+
+        return `
+            <details class="sdg-target-details" open>
+                <summary>
+                    <span>หัวข้อย่อย SDG ${sdg.id}</span>
+                    <span class="sdg-target-count" data-sdg-target-count data-sdg-id="${sdg.id}">${selectedTargets.size ? `${selectedTargets.size} selected` : 'optional'}</span>
+                </summary>
+                <div class="sdg-target-list">${targetList}</div>
+            </details>
+        `;
+    },
+
     updateSelectedSDGs() {
         const container = document.getElementById('selected-sdgs');
         if (!container) return;
@@ -857,13 +2603,26 @@ export const appState = {
             existingNotes[note.dataset.sdgId] = note.value;
         });
 
+        const selectedIds = Array.from(document.querySelectorAll('.sdg-checkbox:checked'), cb => cb.dataset.sdgId);
+        const existingTargets = this.filterSDGTargetsToSelected(
+            this.collectVisibleSDGTargets(this.getSDGTargetsState()),
+            selectedIds
+        );
+        this.setSDGTargetsState(existingTargets);
+
         const selected = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => {
             const sdgId = cb.dataset.sdgId;
             const sdg = SDGs_LIST.find(item => String(item.id) === sdgId);
-            return { ...sdg, value: cb.value, note: existingNotes[sdgId] || '' };
+            return {
+                ...sdg,
+                value: cb.value,
+                note: existingNotes[sdgId] || '',
+                targets: new Set(existingTargets[sdgId] ?? [])
+            };
         });
 
         if (selected.length === 0) {
+            this.setSDGTargetsState({});
             container.innerHTML = '<p class="text-sm text-gray-500 italic">ยังไม่ได้เลือก SDGs</p>';
             return;
         }
@@ -879,8 +2638,10 @@ export const appState = {
                 </div>
                 <label class="form-label">เหตุผลที่เกี่ยวข้องกับโครงการนี้</label>
                 <textarea rows="2" class="form-control resize-none sdg-reason" data-sdg-id="${sdg.id}" placeholder="ระบุเหตุผลสั้น ๆ ว่า SDG นี้เกี่ยวข้องอย่างไร">${this.escapeHTML(sdg.note)}</textarea>
+                ${this.renderSDGTargetOptions(sdg, sdg.targets)}
             </div>
         `).join('');
+        this.updateSDGTargetCounts();
     },
 
     createSROIRow(overrides = {}) {
@@ -1067,27 +2828,9 @@ export const appState = {
         return Math.max(0, Math.min(100, this.parseNumberValue(value))) / 100;
     },
 
-    isSROIRowStarted(row) {
-        const textFields = [
-            'stakeholderGroup',
-            'inputDescription',
-            'outputSummary',
-            'changeDepth',
-            'weighting',
-            'outcomeDescription',
-            'valuationApproach',
-            'indicatorSource'
-        ];
-        const moneyFields = ['groupSize', 'investment', 'quantity', 'monetaryValue'];
-        const adjustmentFields = ['deadweight', 'displacement', 'attribution', 'dropoff'];
-
-        return textFields.some(field => String(row[field] ?? '').trim())
-            || moneyFields.some(field => this.parseNumberValue(row[field]) > 0)
-            || adjustmentFields.some(field => this.parseNumberValue(row[field]) > 0)
-            || this.parseNumberValue(row.duration) !== 1
-            || this.parseNumberValue(row.discountRate) !== 3.5
-            || row.outcomeStart !== 'period-activity';
-    },
+    // Shared with the dashboard's draft-resume prompt (hasMeaningfulContent()) so
+    // "started" means the same thing everywhere.
+    isSROIRowStarted,
 
     getActiveSROIRows() {
         return this.sroiRows.filter(row => this.isSROIRowStarted(row));
@@ -1317,19 +3060,28 @@ export const appState = {
         `;
     },
 
-    formatMoney(amount) {
-        return amount.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    },
-
-    formatNumber(amount) {
-        return amount.toLocaleString('th-TH', {maximumFractionDigits: 0});
-    },
+    // Re-exposed as methods so the ~25 existing `this.formatMoney(...)` /
+    // `this.escapeHTML(...)` calls in the template strings below keep working.
+    // The implementations live in lib/format.js, shared with dashboard.js.
+    formatMoney,
+    formatNumber,
 
     generateReport() {
         this.setText('r_projectName', this.getValue('m_projectName') || 'ไม่ได้ระบุชื่อโครงการ');
         this.setText('r_responsible', this.getValue('m_responsible'));
         this.setText('r_area', this.getValue('m_area'));
         this.setText('r_objective', this.getValue('m_objective'));
+
+        // Audit line and team list. Blank for an unsaved project, which has neither.
+        this.setText('r_updated_meta', formatUpdatedMeta(this.projectMeta));
+
+        const team = (this.projectMeta?.project_members ?? [])
+            .map(member => member.member_email)
+            .filter(Boolean);
+        this.setText(
+            'r_team',
+            team.length ? `ผู้ร่วมวิจัย: ${team.join(', ')}` : ''
+        );
 
         const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
         const sdgContainer = document.getElementById('r_sdgs');
@@ -1355,9 +3107,10 @@ export const appState = {
         this.setText('r_indicator_outcome', this.getValue('i_indicator_outcome'));
         this.setText('r_indicator_impact', this.getValue('i_indicator_impact'));
 
-        if(this.uploadedImage) {
+        const firstActivityImage = this.activityImages.find(image => image.src)?.src || this.uploadedImage;
+        if(firstActivityImage) {
             const img = document.getElementById('r_photo');
-            img.src = this.uploadedImage;
+            img.src = firstActivityImage;
             img.classList.remove('hidden');
         } else {
             const img = document.getElementById('r_photo');
@@ -1407,12 +3160,30 @@ export const appState = {
                 return;
             }
 
+            if (target.id === 'boundary-search') {
+                return;
+            }
+
             if (target.id === 'm_area' && this.getValue('m_lat') && target.value !== this.getValue('m_place_name')) {
                 this.clearAreaLocation();
             }
 
             if (target.id === 'm_location_label') {
                 this.refreshSelectedLocationLabel();
+                this.scheduleSave();
+                this.updateLiveSummary();
+                return;
+            }
+
+            if (target.classList.contains('objective-input')) {
+                this.updateObjectiveHidden();
+                this.scheduleSave();
+                this.updateLiveSummary();
+                return;
+            }
+
+            if (target.id === 'sv_key_takeaway') {
+                this.updateKeyTakeawayCounter();
                 this.scheduleSave();
                 this.updateLiveSummary();
                 return;
@@ -1445,6 +3216,18 @@ export const appState = {
                 return;
             }
 
+            if (target.classList.contains('sdg-target-checkbox')) {
+                this.updateSDGTargetsHidden();
+                this.scheduleSave();
+                this.updateLiveSummary();
+                return;
+            }
+
+            if (target.id === 'boundary-admin-level') {
+                if (this.mapSelectionMode === 'boundary') this.loadVisibleBoundaries({ force: true });
+                return;
+            }
+
             if (target.dataset.sroiRow && target.dataset.sroiField) {
                 this.updateSROIRow(target.dataset.sroiRow, target.dataset.sroiField, target.value);
                 return;
@@ -1458,29 +3241,8 @@ export const appState = {
         });
     },
 
-    collectDraft() {
-        const fields = {};
-        document.querySelectorAll('input[id], textarea[id], select[id]').forEach(element => {
-            if (element.type === 'file' || element.type === 'checkbox' || element.dataset.sroiRow) return;
-            fields[element.id] = element.value;
-        });
-
-        const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
-        const sdgReasons = {};
-        document.querySelectorAll('.sdg-reason').forEach(note => {
-            sdgReasons[note.dataset.sdgId] = note.value;
-        });
-
-        return {
-            fields,
-            selectedSDGs,
-            sdgReasons,
-            sroiRows: this.sroiRows,
-            updatedAt: new Date().toISOString()
-        };
-    },
-
     scheduleSave() {
+        this.isDirty = true;
         window.clearTimeout(this.saveTimer);
         this.saveTimer = window.setTimeout(() => this.saveDraft(), 250);
         const status = document.getElementById('draft-status');
@@ -1488,37 +3250,22 @@ export const appState = {
     },
 
     saveDraft() {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(this.collectDraft()));
+        localStorage.setItem(getDraftKey(), JSON.stringify(serialiseAssessment(this)));
         const status = document.getElementById('draft-status');
         if (status) status.innerText = 'บันทึก draft แล้ว';
     },
 
     loadDraft() {
-        const rawDraft = localStorage.getItem(DRAFT_KEY);
+        const rawDraft = localStorage.getItem(getDraftKey());
         if (!rawDraft) return;
 
         try {
-            const draft = JSON.parse(rawDraft);
-            if (Array.isArray(draft.sroiRows) && draft.sroiRows.length > 0) {
-                this.sroiRows = draft.sroiRows.map(row => this.createSROIRow(row));
-                this.renderSROIRows();
-            }
-
-            Object.entries(draft.fields || {}).forEach(([id, value]) => {
-                const element = document.getElementById(id);
-                if (element && element.type !== 'file') element.value = value;
-            });
-
-            const selected = new Set(draft.selectedSDGs || []);
-            document.querySelectorAll('.sdg-checkbox').forEach(cb => {
-                cb.checked = selected.has(cb.value);
-            });
-            this.updateSelectedSDGs();
-            Object.entries(draft.sdgReasons || {}).forEach(([sdgId, value]) => {
-                const note = document.querySelector(`.sdg-reason[data-sdg-id="${sdgId}"]`);
-                if (note) note.value = value;
-            });
-            this.filterSDGs();
+            // For an existing project (?id=...), loadExistingProject() runs right after
+            // this during page load and overwrites currentStep from the saved row anyway
+            // -- setting it here only matters for resuming a "new project" draft, where
+            // it's what lets "Continue draft" reopen on the step the user left off at.
+            const { currentStep } = deserialiseAssessment(normaliseSnapshot(JSON.parse(rawDraft)), this);
+            this.currentStep = currentStep;
         } catch (error) {
             console.warn('Could not load SROI draft', error);
         }
@@ -1552,156 +3299,280 @@ export const appState = {
         });
     },
 
+    // The step-5 recheck modal's ยืนยัน button is the only entry point -- it shows the
+    // whole report before committing, which already IS the confirmation step, so this
+    // needs no confirm() of its own. There is deliberately no save button on step 6;
+    // see the comment in index.html above #step-6.
     async confirmAndSave() {
-        if (confirm('คุณต้องการบันทึกผลการประเมินนี้ใช่หรือไม่? (Do you want to save this assessment?)')) {
-            
-            const btn = document.getElementById('btn-save-assessment');
-            const originalText = btn ? btn.innerHTML : 'บันทึกผลประเมิน';
-            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
+        const btn = document.getElementById('modal-btn-confirm');
+        const originalText = btn ? btn.innerHTML : 'ยืนยัน';
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
 
-            const selectedSDGs = Array.from(document.querySelectorAll('.sdg-checkbox:checked')).map(cb => cb.value);
+        // Saving from the modal finishes the assessment, so the persisted snapshot must
+        // say step 6 -- otherwise reopening the project from the dashboard lands back on
+        // step 5 (buildProjectPayload() below reads currentStep at call time).
+        this.currentStep = this.totalSteps;
 
-            const projectData = {
-                currentStep: this.currentStep,
-                sroiCalculations: this.calculateSROI(),
-                inputs: {
-                    m_projectName: document.getElementById('m_projectName')?.value || '',
-                    m_responsible: document.getElementById('m_responsible')?.value || '',
-                    m_area: document.getElementById('m_area')?.value || '',
-                    m_objective: document.getElementById('m_objective')?.value || '',
-                    sdgs: selectedSDGs,
-                    i_manpower: document.getElementById('i_manpower')?.value || '',
-                    i_budget: document.getElementById('i_budget')?.value || '',
-                    i_activities: document.getElementById('i_activities')?.value || '',
-                    i_output: document.getElementById('i_output')?.value || '',
-                    i_outcome: document.getElementById('i_outcome')?.value || '',
-                    i_impact: document.getElementById('i_impact')?.value || '',
-                    sv_quote: document.getElementById('sv_quote')?.value || '',
-                    c_outcome_value: document.getElementById('c_outcome_value')?.value || '',
-                    c_base_case: document.getElementById('c_base_case')?.value || '',
-                    c_investment: document.getElementById('c_investment')?.value || '',
-                    uploadedImage: this.uploadedImage 
-                }
-            };
+        // Read the draft key BEFORE saving. For a first save saveProjectData() calls
+        // history.replaceState() to put ?id=<newId> in the URL, which changes what
+        // getDraftKey() returns -- clearing it afterwards would delete a key that never
+        // existed and strand the real 'sroi-evaluation-draft-new' entry forever.
+        const draftKeyToClear = getDraftKey();
 
-            const isSuccess = await saveProjectData(projectData);
+        // Captures every field, the raw SROI rows, the map/location data, and the
+        // SDG reasons -- all of which the old hand-written list silently dropped.
+        const isSuccess = await saveProjectData(buildProjectPayload(this));
 
-            if (isSuccess) {
-                if (btn) btn.innerHTML = originalText;
-                this.isViewMode = true;
-                this.updateStepUI(); 
-                alert('บันทึกข้อมูลสำเร็จ (Data saved successfully!)');
-            } else {
-                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง (Error saving data)');
-                if (btn) btn.innerHTML = originalText;
-            }
+        if (btn) btn.innerHTML = originalText;
+
+        if (!isSuccess) {
+            alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง (Error saving data)');
+            return;
         }
+
+        localStorage.removeItem(draftKeyToClear);
+
+        // Saving from step 5 is what produces the report, so land the user on it.
+        // currentStep was already bumped to totalSteps above, before the payload was
+        // built, so the persisted snapshot matches what's shown here.
+        this.hideRecheckModal();
+        this.isViewMode = true;
+        this.updateStepUI();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        // Closing the modal onto the finished report is itself the confirmation --
+        // no further alert needed.
     },
 
-    escapeHTML(value) {
-        return String(value ?? '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-    }
+    // Step 5's "สรุปผลเป็นรายงาน" opens this instead of saving straight away: the
+    // report is rendered into the modal so it can be read before anything is committed.
+    // generateReport() writes into #report-container on the hidden step 6, and the
+    // markup is copied out of there -- so the modal always matches what step 6 will show.
+    showRecheckModal() {
+        this.generateReport();
+        const reportContainer = document.getElementById('report-container');
+        const modalContent = document.getElementById('modal-report-content');
+        const modal = document.getElementById('recheck-modal');
+        if (!reportContainer || !modalContent || !modal) return;
+
+        modalContent.innerHTML = reportContainer.innerHTML;
+        modal.classList.remove('hidden');
+    },
+
+    hideRecheckModal() {
+        document.getElementById('recheck-modal')?.classList.add('hidden');
+    },
+
+    escapeHTML
 };
 
 
 // ==========================================
-// SUPABASE LOGIC 
+// SUPABASE LOGIC
 // ==========================================
+
+// The browser's back/forward cache can restore this whole page -- DOM, form values,
+// whatever step was showing -- from memory without re-running any of the init logic
+// below (no DOMContentLoaded fires). Clicking "New Assessment" then "back" then
+// "New Assessment" again could land on a stale bfcache snapshot: old field values,
+// old checked SDGs, whatever step it was left on -- including step 6, bypassing
+// every guard in goToStep()/initializeNewProject() because none of that code reran.
+// Forcing a real reload when a bfcache restore is detected guarantees "new" always
+// actually starts fresh.
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+        window.location.reload();
+    }
+});
 
 document.addEventListener('DOMContentLoaded', async () => {
     appState.init();
 
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
-        console.log("No active session found. Showing landing page.");
-        appState.showView('view-landing'); 
+    const urlParams = new URLSearchParams(window.location.search);
+    const isLocalInputFormTest =
+        urlParams.get('test') === 'input-form' &&
+        ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+
+    if (isLocalInputFormTest) {
+        const identity = Object.freeze({
+            userId: 'local-input-form-test',
+            email: 'input-form-test@local.test',
+            role: 'researcher',
+            displayName: 'Input Form Test'
+        });
+
+        appState.identity = identity;
+        appState.showView('view-app');
+        document.getElementById('user-email-display').innerText = identity.email;
+        document.getElementById('nav-user').classList.remove('hidden');
+        initializeNewProject(identity, urlParams.get('fresh') !== '0');
+
+        const requestedStep = Number(urlParams.get('step'));
+        if (requestedStep >= 1 && requestedStep < appState.totalSteps) {
+            appState.currentStep = requestedStep;
+            appState.updateStepUI();
+        }
         return;
     }
 
-    const userEmail = session.user.email;
-    const urlParams = new URLSearchParams(window.location.search);
+    // Unauthenticated visitors get the landing page rather than being redirected,
+    // so the two login buttons are reachable. redirectOnMissing: false is what makes
+    // that possible -- loadIdentity() would otherwise send them to '/'.
+    const identity = await loadIdentity({ redirectOnMissing: false });
+
+    if (!identity) {
+        console.log('No active session. Showing landing page.');
+        appState.showView('view-landing');
+        return;
+    }
+
+    appState.identity = identity;
+
     const projectId = urlParams.get('id');
     const isNew = urlParams.get('new');
+    // Set only by the dashboard's "start new assessment" choice (never by "continue
+    // draft" or by the plain new-assessment link when there was no draft to ask
+    // about) -- see index.html?new=true[&fresh=1] and dashboard.js.
+    const isFresh = urlParams.get('fresh') === '1';
+    // Set only by the dashboard's per-project "continue unsaved edit" choice -- see
+    // index.html?id=...&resumeDraft=1 and dashboard.js.
+    const resumeDraft = urlParams.get('resumeDraft') === '1';
 
     if (projectId || isNew) {
         appState.showView('view-app');
         appState.updateStepUI();
-        
-        document.getElementById('user-email-display').innerText = userEmail;
+
+        document.getElementById('user-email-display').innerText = identity.email;
         document.getElementById('nav-user').classList.remove('hidden');
 
         if (projectId) {
-            console.log(`Resuming project ID: ${projectId}`);
-            await loadExistingProject(projectId, userEmail);
+            await loadExistingProject(projectId, identity, resumeDraft);
         } else {
-            console.log("Starting a new assessment");
-            initializeNewProject();
+            initializeNewProject(identity, isFresh);
         }
     } else {
         window.location.href = '/dashboard.html';
     }
 });
 
-async function loadExistingProject(id, email) {
+/**
+ * @param id
+ * @param identity
+ * @param resumeDraft - true only when the dashboard's per-project prompt (see
+ *   dashboard.js) offered "continue unsaved edit" over a local draft for THIS
+ *   project's id (getDraftKey() -> 'sroi-evaluation-draft-<id>') and the user picked
+ *   it. appState.init() -> loadDraft() already restored that draft's fields, SROI
+ *   rows, and currentStep into the form before this function runs -- so resuming
+ *   means leaving all of that alone and only pulling permissions/team data from the
+ *   server row. The normal path (false) discards any local draft for this id and
+ *   shows the server's last explicitly-saved version, as before.
+ */
+async function loadExistingProject(id, identity, resumeDraft) {
+    // No .eq('user_email', ...) any more -- that filter would hide projects shared
+    // with this user. RLS (0005) decides what is visible; a row we may not see
+    // simply comes back empty.
+    //
+    // maybeSingle() rather than single(): with collaboration, "exists but not yours"
+    // is a normal outcome and must not surface as a thrown error.
     const { data: project, error } = await supabase
         .from('projects')
-        .select('*')
+        .select('*, project_members(user_id, member_email, added_at)')
         .eq('id', id)
-        .eq('user_email', email)
-        .single(); 
+        .maybeSingle();
 
     if (error) {
         console.error("Error loading project:", error);
-        alert("Could not load your project data.");
+        alert("ไม่สามารถโหลดข้อมูลโครงการได้ (Could not load the project.)");
         return;
     }
 
-    if (project.assessment_data && project.assessment_data.inputs) {
-        const inputs = project.assessment_data.inputs;
-        const fieldsToRestore = [
-            'm_projectName', 'm_responsible', 'm_area', 'm_objective',
-            'i_manpower', 'i_budget', 'i_activities', 'i_output', 
-            'i_outcome', 'i_impact', 'sv_quote', 
-            'c_outcome_value', 'c_base_case', 'c_investment'
-        ];
-
-        fieldsToRestore.forEach(fieldId => {
-            const el = document.getElementById(fieldId);
-            if (el && inputs[fieldId] !== undefined) {
-                el.value = inputs[fieldId];
-            }
-        });
-
-        if (inputs.sdgs && Array.isArray(inputs.sdgs)) {
-            document.querySelectorAll('.sdg-checkbox').forEach(cb => {
-                if (inputs.sdgs.includes(cb.value)) {
-                    cb.checked = true;
-                }
-            });
-        }
-
-        if (inputs.uploadedImage) {
-            appState.uploadedImage = inputs.uploadedImage;
-        }
-    } else if (project.project_name) {
-        const projectNameInput = document.getElementById('m_projectName');
-        if (projectNameInput) projectNameInput.value = project.project_name;
+    if (!project) {
+        alert("ไม่พบโครงการนี้ หรือคุณไม่มีสิทธิ์เข้าถึง (Project not found, or you don't have access.)");
+        window.location.href = '/dashboard.html';
+        return;
     }
 
-    appState.currentStep = 6; 
-    appState.isViewMode = true; 
+    if (resumeDraft) {
+        // Keep editing exactly where the local draft left off -- form fields, SROI
+        // rows, and currentStep were already restored by loadDraft() during init().
+        appState.isViewMode = false;
+    } else {
+        // Discarding whatever local draft exists for this id (there may be none,
+        // which is a harmless no-op) before loading the server's version, so a stale
+        // draft can't reappear the next time this project is opened normally.
+        localStorage.removeItem(getDraftKey());
+
+        // normaliseSnapshot() upgrades the old { inputs, sroiCalculations } shape and
+        // recovers the raw SROI rows from sroiCalculations.rows[].row. Skipping it would
+        // load a legacy project with an empty SROI table, and the next save would then
+        // write zeros over the real stored results.
+        const snapshot = normaliseSnapshot(project.assessment_data);
+
+        if (snapshot) {
+            const { currentStep } = deserialiseAssessment(snapshot, appState);
+            appState.currentStep = Math.min(Math.max(currentStep, 1), appState.totalSteps);
+        } else if (project.project_name) {
+            const projectNameInput = document.getElementById('m_projectName');
+            if (projectNameInput) projectNameInput.value = project.project_name;
+            appState.currentStep = 1;
+        }
+
+        // Saved projects open read-only so an accidental keystroke cannot alter a
+        // finished assessment; "แก้ไขข้อมูล" now reveals a fully populated, genuinely
+        // editable form. applyProjectAccess() decides whether that button appears at all.
+        appState.isViewMode = true;
+    }
+
+    appState.applyProjectAccess(identity, project);
     appState.updateStepUI();
+    appState.calculateSROIPreview();
+    appState.updateSelectedSDGs();
+    appState.updateLiveSummary();
 }
 
-function initializeNewProject() {
-    appState.isViewMode = false;
-    appState.currentStep = 1;
+/**
+ * @param identity
+ * @param fresh - true only when the dashboard's "start new assessment" choice was
+ *   picked over an existing draft (see index.html?new=true&fresh=1 in the
+ *   DOMContentLoaded handler above). Every never-saved project shares one draft key
+ *   ('sroi-evaluation-draft-new', see getDraftKey()), and appState.init() ->
+ *   loadDraft() already ran before we knew "new" vs "existing" -- so by this point a
+ *   previous, unrelated, abandoned new-project draft may already be sitting in the
+ *   form (and appState.currentStep may already be wherever that draft left off).
+ *   fresh=true wipes both the stored draft and what loadDraft() just populated, so
+ *   "start new" always actually means new. fresh=false ("continue draft", or a plain
+ *   new-assessment click when there was nothing to resume) leaves all of that alone.
+ */
+function initializeNewProject(identity, fresh) {
+    if (fresh) {
+        localStorage.removeItem('sroi-evaluation-draft-new');
+
+        appState.currentStep = 1;
+        appState.uploadedImage = null;
+        appState.activityImages = [];
+        appState.sroiRows = [appState.createSROIRow()];
+        appState.isViewMode = false;
+
+        document.querySelectorAll('input, textarea').forEach(el => {
+            // Checkbox/radio "value" is a fixed identifier (e.g. "SDG 2: ..."), not user
+            // text -- clearing it would permanently break lookups like generateReport()'s
+            // .sdg-checkbox:checked -> cb.value, even after the box is checked again.
+            if (el.type !== 'file' && el.type !== 'checkbox' && el.type !== 'radio') el.value = '';
+        });
+        document.querySelectorAll('select').forEach(el => { el.selectedIndex = 0; });
+        document.querySelectorAll('.sdg-checkbox').forEach(cb => { cb.checked = false; });
+
+        appState.renderObjectiveInputs(['']);
+        appState.updateKeyTakeawayCounter();
+        appState.renderActivityPhotoSlots();
+        appState.renderSROIRows();
+        appState.updateSelectedSDGs();
+    } else {
+        appState.isViewMode = false;
+    }
+
+    // A brand-new project has no row yet, so the creator is treated as its owner.
+    appState.applyProjectAccess(identity, null);
     appState.updateStepUI();
 }
 
@@ -1717,34 +3588,53 @@ export async function saveProjectData(currentProjectData) {
     }
 
     if (projectId) {
-        const { error } = await supabase
+        // Access is enforced by RLS via owner_id / project_members (see
+        // supabase/migrations/0005_rls_v2.sql), not by user_email -- that column is only
+        // a denormalised fallback and does not track collaborators or ownership
+        // transfers. Filtering on it here would reject legitimate updates RLS allows.
+        const { data, error } = await supabase
             .from('projects')
-            .update({ 
+            .update({
+                // Denormalised copy that the dashboard and admin lists render. Without
+                // it, renaming a project in step 1 saved the new name into
+                // assessment_data but left every card still showing the old one.
+                // updated_at / updated_by are deliberately NOT sent -- the
+                // projects_set_audit_fields trigger owns them and ignores client values.
+                project_name: document.getElementById('m_projectName')?.value || 'ไม่ได้ระบุชื่อโครงการ',
                 assessment_data: currentProjectData,
                 last_page_url: window.location.href
             })
-            .eq('id', projectId);
-            
+            .eq('id', projectId)
+            .select();
+
         if (error) {
             console.error("Update failed:", error);
             return false;
-        } else {
-            console.log("Project successfully updated!");
-            return true; 
         }
+
+        if (!data || data.length === 0) {
+            console.error("Update affected no rows: project missing or blocked by RLS.");
+            return false;
+        }
+
+        console.log("Project successfully updated!");
+        return true;
     } else {
         const projectNameInput = document.getElementById('m_projectName');
         const finalProjectName = (projectNameInput && projectNameInput.value) ? projectNameInput.value : "ไม่ได้ระบุชื่อโครงการ";
 
         const { data, error } = await supabase
             .from('projects')
-            .insert([{ 
+            .insert([{
+                // owner_id is what RLS checks (supabase/migrations/0005_rls_v2.sql);
+                // user_email is kept only as a readable fallback, not for access control.
+                owner_id: session.user.id,
                 user_email: session.user.email,
-                project_name: finalProjectName, 
+                project_name: finalProjectName,
                 assessment_data: currentProjectData,
                 last_page_url: window.location.href
             }])
-            .select(); 
+            .select();
             
         if (error) {
             console.error("Insert failed:", error);

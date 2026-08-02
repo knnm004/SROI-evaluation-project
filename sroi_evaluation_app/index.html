@@ -7,25 +7,33 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Noto+Sans+Mende+Kikakui&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
 
     <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
-                <div class="flex items-center gap-3 cursor-pointer" onclick="appState.goHome()">
-                    <div class="w-10 h-10 bg-chula rounded-full flex items-center justify-center text-white text-xl shadow-inner">
-                        <i class="fa-solid fa-graduation-cap"></i>
-                    </div>
-                    <div>
-                        <h1 class="font-bold text-lg leading-tight text-gray-900">SROI Evaluation Platform</h1>
-                        <p class="text-xs text-chula-dark font-medium">Chulalongkorn University</p>
-                    </div>
+                <div class="flex items-center justify-between flex-1 gap-3 cursor-pointer mr-4" onclick="appState.goHome()">
+                    <img src="/images/chula-logo.png" alt="Chulalongkorn University" class="h-11 w-auto shrink-0 object-contain">
+                    <!-- No subtitle here: the logo itself already spells out
+                         "Chulalongkorn University", so repeating it as text was
+                         redundant right next to it. -->
+                    <h1 class="font-bold text-lg leading-tight text-gray-900">Chula Triple S System</h1>
                 </div>
+                <!--
+                  "เกี่ยวกับระบบ" / "ช่วยเหลือ" hidden for now -- both called
+                  appState.scrollToIntro(), which still has an unresolved scroll-lock
+                  bug (page gets stuck and won't scroll back up after landing on the
+                  About section). Re-enable once that's actually fixed, not just
+                  patched again.
+                -->
+                <nav id="landing-nav" class="hidden md:flex items-center gap-6 text-sm font-medium text-gray-500">
+                    <a href="#" onclick="event.preventDefault(); window.scrollTo({top:0, behavior:'smooth'});" class="hover:text-chula-dark transition-colors">หน้าหลัก</a>
+                </nav>
                 <div id="nav-user" class="hidden flex items-center gap-2">
                     <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
                         <i class="fa-solid fa-user"></i>
@@ -37,70 +45,231 @@
         </div>
     </header>
 
-    <main class="flex-grow flex flex-col items-center justify-center p-4 sm:p-6 w-full max-w-7xl mx-auto">
-        
-        <div id="view-landing" class="text-center max-w-3xl fade-in">
-            <h2 class="text-3xl md:text-5xl font-bold text-gray-900 mb-6">ระบบประเมินผลตอบแทนทางสังคม<br><span class="text-chula">(SROI Evaluation Framework)</span></h2>
-            <p class="text-lg text-gray-600 mb-8 leading-relaxed">
-                เครื่องมือสำหรับนักวิจัยและบุคลากรเพื่อประเมินความคุ้มค่าและผลกระทบเชิงบวกทางสังคมของงานวิจัย 
-                และโครงการวิชาการต่างๆ 
+    <main class="relative flex-grow flex flex-col items-center justify-center p-4 sm:p-6 w-full max-w-7xl mx-auto">
+
+        <div id="view-landing" class="relative overflow-hidden max-w-5xl mx-auto fade-in">
+            <!--
+              Purely decorative -- the two starburst motifs sit behind the content
+              (-z-10), extend past the narrow text column into the empty margins
+              rather than behind the text/buttons themselves, and never intercept
+              clicks (pointer-events-none). Low opacity keeps them from competing
+              with the actual copy/CTAs for attention.
+            -->
+            <div class="hidden sm:block absolute -z-10 -top-16 -left-24 w-72 h-72 text-chula opacity-[0.07] pointer-events-none" aria-hidden="true">
+                <svg viewBox="-10 -10 220 220" class="w-full h-full" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="100" cy="100" r="14" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="170" y2="100"/><circle cx="170" cy="100" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="180" y2="129"/><circle cx="180" cy="129" r="6" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="157" y2="148"/><circle cx="157" cy="148" r="3" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="145" y2="178"/><circle cx="145" cy="178" r="7" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="111" y2="164"/><circle cx="111" cy="164" r="5" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="86" y2="179"/><circle cx="86" cy="179" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="65" y2="161"/><circle cx="65" cy="161" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="35" y2="155"/><circle cx="35" cy="155" r="6" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="30" y2="126"/><circle cx="30" cy="126" r="3" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="10" y2="100"/><circle cx="10" cy="100" r="7" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="39" y2="78"/><circle cx="39" cy="78" r="5" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="39" y2="49"/><circle cx="39" cy="49" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="65" y2="39"/><circle cx="65" cy="39" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="85" y2="16"/><circle cx="85" cy="16" r="6" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="113" y2="26"/><circle cx="113" cy="26" r="3" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="145" y2="22"/><circle cx="145" cy="22" r="7" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="150" y2="58"/><circle cx="150" cy="58" r="5" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="175" y2="73"/><circle cx="175" cy="73" r="4" fill="currentColor" stroke="none"/>
+                </svg>
+            </div>
+            <div class="hidden sm:block absolute -z-10 -bottom-20 -right-24 w-72 h-72 text-chula opacity-[0.06] pointer-events-none rotate-45" aria-hidden="true">
+                <svg viewBox="-10 -10 220 220" class="w-full h-full" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="100" cy="100" r="14" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="170" y2="100"/><circle cx="170" cy="100" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="180" y2="129"/><circle cx="180" cy="129" r="6" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="157" y2="148"/><circle cx="157" cy="148" r="3" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="145" y2="178"/><circle cx="145" cy="178" r="7" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="111" y2="164"/><circle cx="111" cy="164" r="5" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="86" y2="179"/><circle cx="86" cy="179" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="65" y2="161"/><circle cx="65" cy="161" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="35" y2="155"/><circle cx="35" cy="155" r="6" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="30" y2="126"/><circle cx="30" cy="126" r="3" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="10" y2="100"/><circle cx="10" cy="100" r="7" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="39" y2="78"/><circle cx="39" cy="78" r="5" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="39" y2="49"/><circle cx="39" cy="49" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="65" y2="39"/><circle cx="65" cy="39" r="4" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="85" y2="16"/><circle cx="85" cy="16" r="6" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="113" y2="26"/><circle cx="113" cy="26" r="3" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="145" y2="22"/><circle cx="145" cy="22" r="7" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="150" y2="58"/><circle cx="150" cy="58" r="5" fill="currentColor" stroke="none"/>
+                    <line x1="100" y1="100" x2="175" y2="73"/><circle cx="175" cy="73" r="4" fill="currentColor" stroke="none"/>
+                </svg>
+            </div>
+
+            <!--
+              Diagram lives only in the About section below now -- keeping the hero
+              to just headline/description/buttons so login stays uncluttered and
+              guaranteed visible without scrolling.
+            -->
+            <h2 class="text-2xl md:text-4xl font-bold text-gray-900 text-center mb-1">ระบบประเมินผลตอบแทนทางสังคม</h2>
+            <p class="text-lg md:text-xl font-semibold text-chula mb-3 text-center">Chula Triple S System</p>
+            <p class="text-base md:text-lg text-gray-600 mb-4 leading-relaxed text-center max-w-2xl mx-auto">
+                ระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย
+
                 <br><br>เข้าสู่ระบบเพื่อเริ่มต้นกรอกข้อมูล ประเมินผล และออกรายงานฉบับสมบูรณ์
             </p>
-            <button onclick="appState.showView('view-login')" class="bg-chula hover:bg-chula-dark text-white font-medium py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-lg">
-                <i class="fa-brands fa-microsoft mr-2"></i> เข้าสู่ระบบด้วยบัญชีองค์กร
-            </button>
-        </div>
+            <div class="flex flex-col sm:flex-row gap-3 justify-center items-stretch" data-testid="landing-auth-actions">
+                <button type="button" onclick="appState.login()" data-testid="login-google-btn"
+                        class="bg-chula hover:bg-chula-dark text-white font-medium py-2.5 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-lg">
+                    <i class="fa-brands fa-google mr-2"></i> เข้าสู่ระบบด้วยบัญชีจุฬาฯ
+                </button>
+                <button type="button" onclick="appState.showView('view-login')" data-testid="login-password-open-btn"
+                        class="bg-white hover:bg-gray-50 text-chula-darker font-medium py-2.5 px-8 rounded-full border-2 border-chula-light shadow-sm transition-all duration-300 transform hover:-translate-y-1 text-lg">
+                    <i class="fa-solid fa-envelope mr-2"></i> สมาชิก/บุคคลทั่วไป
+                </button>
+            </div>
+            <p class="text-sm text-gray-400 mt-3 text-center">
+                บุคลากรและนิสิตใช้บัญชีจุฬาฯ &middot; สมาชิกภายนอกใช้อีเมลและรหัสผ่านที่ผู้ดูแลระบบออกให้
+            </p>
 
+            <hr class="mt-6 border-gray-200">
+
+            <!--
+              Collapsed by default so the login buttons stay the first, uncluttered
+              thing anyone sees. The full bilingual introduction (client-provided
+              copy, do not edit the wording) lives here instead of stacked below the
+              buttons -- reading it is opt-in via <summary>, and a language tab
+              switch (reusing .framework-tab from the report step) shows one
+              language block at a time instead of doubling the reading length.
+            -->
+            <details class="mt-6 scroll-mt-24 text-left max-w-2xl mx-auto group" id="intro-details" data-testid="landing-intro">
+                <summary class="cursor-pointer list-none flex items-start gap-3 text-gray-500 hover:text-chula-dark transition-colors">
+                    <i class="fa-solid fa-circle-info mt-0.5"></i>
+                    <span class="flex-1">
+                        <span class="flex items-center gap-2">
+                            <span class="text-sm font-semibold text-gray-700">เกี่ยวกับระบบนี้ (About Chula Triple S System)</span>
+                            <i class="fa-solid fa-chevron-down text-xs transition-transform group-open:rotate-180"></i>
+                        </span>
+                        <span class="block text-xs text-gray-400 mt-0.5">
+                            ภาพรวมของกรอบการประเมิน ตัวชี้วัด และการเชื่อมโยงกับเป้าหมายการพัฒนาที่ยั่งยืน (SDGs) &mdash; อ่านรายละเอียดเพิ่มเติมก่อนเข้าสู่ระบบ
+                        </span>
+                    </span>
+                </summary>
+                <div class="mt-4 bg-white border border-gray-200 rounded-xl p-5 sm:p-6 shadow-sm">
+                    <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram"
+                         class="w-full max-w-xs sm:max-w-sm mx-auto mb-5">
+                    <div class="flex gap-2 mb-4">
+                        <button type="button" onclick="appState.showIntroLang('th')" data-intro-tab="th"
+                                data-testid="intro-tab-th" class="framework-tab framework-tab-active">ภาษาไทย</button>
+                        <button type="button" onclick="appState.showIntroLang('en')" data-intro-tab="en"
+                                data-testid="intro-tab-en" class="framework-tab framework-tab-idle">English</button>
+                    </div>
+
+                    <div data-intro-lang="th" class="text-sm text-gray-600 leading-relaxed space-y-3">
+                        <p>Chula Triple S System คือระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย ออกแบบสำหรับผู้บริหาร นักวิชาการ และนักวิจัย เพื่อช่วยวิเคราะห์เส้นทางการสร้างผลกระทบ กำหนดผลลัพธ์และตัวชี้วัด ติดตามการเปลี่ยนแปลงที่เกิดขึ้น และเชื่อมโยงผลงานกับเป้าหมายการพัฒนาที่ยั่งยืน (SDGs)</p>
+                        <p>ระบบช่วยเปลี่ยนข้อมูลจากการดำเนินโครงการให้เป็นหลักฐานเชิงประจักษ์สำหรับพัฒนางาน ขยายผล และนำองค์ความรู้จากการวิจัยและนวัตกรรมไปแก้ไขปัญหาสังคมอย่างยั่งยืน ขณะเดียวกันผู้บริหารสามารถใช้ข้อมูลประกอบการกำหนดนโยบาย จัดสรรทรัพยากร และตัดสินใจเชิงยุทธศาสตร์ เพื่อยกระดับผลกระทบทางสังคมของมหาวิทยาลัยให้เกิดคุณค่าอย่างเป็นรูปธรรม</p>
+                        <p>ผู้บริหาร นักวิชาการ นักวิจัย และหน่วยงานที่สนใจแลกเปลี่ยนองค์ความรู้ เรียนรู้แนวทางการประเมินผลกระทบทางสังคม หรือนำ Chula Triple S System ไปประยุกต์ใช้และต่อยอด เพื่อยกระดับคุณค่าจากงานวิจัย นวัตกรรม และบริการวิชาการ</p>
+                        <p>ติดต่อเพื่อขอข้อมูลเพิ่มเติมได้ที่ [email]</p>
+                    </div>
+
+                    <div data-intro-lang="en" class="hidden text-sm text-gray-600 leading-relaxed space-y-3">
+                        <p>Chula Triple S System is an integrated platform for assessing and managing the social impact of research, innovation, and academic service projects at Chulalongkorn University. Designed for university leaders, academics, and researchers, the system supports impact pathway analysis, outcome and indicator development, change tracking, and alignment with the Sustainable Development Goals (SDGs).</p>
+                        <p>The system transforms project data into actionable evidence for improving performance, scaling successful initiatives, and applying research and innovation to sustainable social development. It also enables university leaders to make evidence-informed decisions on policy, resource allocation, and institutional strategy strengthening the university's capacity to create meaningful and measurable social impact.</p>
+                        <p>University leaders, academics, researchers, and organisations interested in exchanging and expanding knowledge, learning about social impact assessment, or applying and further developing the Chula Triple S System to enhance the value and impact of research, innovation, and academic services are welcome to</p>
+                        <p>Contact us for further information at [email].</p>
+                    </div>
+                </div>
+            </details>
+        </div>
         <div id="view-login" class="hidden w-full max-w-md fade-in bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div class="bg-chula p-6 text-center text-white">
+            <!--<div class="bg-chula p-6 text-center text-white">
                 <i class="fa-solid fa-circle-user text-5xl mb-3"></i>
                 <h2 class="text-2xl font-bold">เข้าสู่ระบบ</h2>
-                <p class="text-sm opacity-90">สำหรับบุคลากรจุฬาลงกรณ์มหาวิทยาลัย</p>
-            </div>
+                <p class="text-sm opacity-90">สำหรับบุคลากรและนิสิตจุฬาลงกรณ์มหาวิทยาลัย</p>
+            </div> -->
             <div class="p-8">
-                <form id="login-form" onsubmit="event.preventDefault(); appState.login();">
-                    <div class="mb-5">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">อีเมลองค์กร (CUNET)</label>
-                        <input type="email" id="login-email" required placeholder="example@chula.ac.th" 
-                               class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-chula focus:border-chula outline-none transition-colors">
+                <h2 class="text-xl font-bold text-gray-900 mb-1">เข้าสู่ระบบสำหรับสมาชิก</h2>
+                <p class="text-sm text-gray-500 mb-6">Member sign-in (email &amp; password)</p>
+
+                <!--
+                  There is deliberately NO sign-up and NO forgot-password link.
+                  Member accounts are issued by an administrator: the email is added
+                  to approved_signup_emails, then the account is created by hand.
+                  Do not add supabase.auth.signUp() here without also revisiting
+                  supabase/migrations/0007_signup_hook_v2.sql.
+                -->
+                <form data-testid="login-password-form" novalidate
+                      onsubmit="appState.loginWithPassword(event); return false;">
+                    <div class="mb-4 text-left">
+                        <label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">อีเมล (Email)</label>
+                        <input type="email" id="login-email" name="email" required
+                               autocomplete="username" inputmode="email" placeholder="you@example.com"
+                               data-testid="login-email-input"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none">
                     </div>
-                    <div class="mb-6">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่าน</label>
-                        <input type="password" id="login-password" required placeholder="••••••••" 
-                               class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-chula focus:border-chula outline-none transition-colors">
+
+                    <div class="mb-2 text-left">
+                        <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน (Password)</label>
+                        <div class="relative">
+                            <input type="password" id="login-password" name="password" required
+                                   autocomplete="current-password"
+                                   data-testid="login-password-input"
+                                   class="w-full px-4 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-chula outline-none">
+                            <button type="button" onclick="appState.togglePasswordVisibility()"
+                                    aria-label="แสดงหรือซ่อนรหัสผ่าน" data-testid="login-password-toggle"
+                                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <i class="fa-regular fa-eye" id="login-password-toggle-icon"></i>
+                            </button>
+                        </div>
                     </div>
-                    <button type="submit" class="w-full bg-gray-900 hover:bg-black text-white font-medium py-3 rounded-lg shadow transition-colors">
-                        เข้าสู่ระบบ
+
+                    <p id="login-error" role="alert" aria-live="polite" data-testid="login-error"
+                       class="hidden text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-3 text-left"></p>
+
+                    <button type="submit" id="login-submit" data-testid="login-submit-btn"
+                            class="w-full mt-5 bg-chula hover:bg-chula-dark text-white font-medium py-3 rounded-lg shadow transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                        เข้าสู่ระบบ <i class="fa-solid fa-arrow-right ml-1"></i>
                     </button>
                 </form>
-                <div class="mt-6 text-center">
-                    <button onclick="appState.showView('view-landing')" class="text-sm text-gray-500 hover:text-chula-dark"><i class="fa-solid fa-arrow-left mr-1"></i> กลับหน้าหลัก</button>
+
+                <p class="text-xs text-gray-400 mt-4">
+                    บัญชีสมาชิกออกให้โดยผู้ดูแลระบบ (Member accounts are issued by an administrator)
+                </p>
+
+                <div class="mt-6 pt-4 border-t border-gray-100 space-y-2">
+                    <button type="button" onclick="appState.login()" data-testid="login-google-alt-btn"
+                            class="text-sm font-semibold text-chula-darker hover:underline">
+                        <i class="fa-brands fa-google mr-1"></i> ใช้บัญชีจุฬาฯ แทน
+                    </button>
+                    <div>
+                        <button type="button" onclick="appState.showView('view-landing')" data-testid="login-back-btn"
+                                class="text-sm text-gray-500 hover:text-chula-dark">
+                            <i class="fa-solid fa-arrow-left mr-1"></i> กลับหน้าหลัก
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-
         <div id="view-app" class="hidden w-full max-w-6xl fade-in flex-grow flex flex-col">
             
             <div class="bg-white rounded-xl shadow-sm p-4 mb-6" id="stepper-container">
+                <h2 class="text-lg font-bold text-gray-800 mb-4" id="stepper-title">หัวข้อการประเมิน (Assessment Title Placeholder)</h2>
                 <div class="flex items-center justify-between relative">
                     <div class="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-gray-200 z-0"></div>
                 </div>
             </div>
 
-            <!-- COMMENTED OUT: Redundant project title and edit bar 
-            <div class="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                    <p class="text-xs font-semibold uppercase text-gray-500">Current Project</p>
-                    <p id="project-title-chip" class="font-bold text-gray-900">ยังไม่ได้ตั้งชื่อโครงการ</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-3">
-                    <span id="draft-status" class="text-xs text-gray-500">draft ready</span>
-                    <button type="button" onclick="appState.goToStep(1)" class="px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:border-chula-light hover:text-chula-darker transition-colors">
-                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit project info
-                    </button>
-                </div>
+            <!-- Your role on this project plus who last changed it. Filled by
+                 appState.renderAccessBanner(); hidden for unsaved projects. -->
+            <div id="project-access-banner" data-testid="project-access-banner"
+                 class="hidden mb-4 rounded-xl px-4 py-3 text-sm"></div>
+
+            <!-- Which project you are typing into. Complements the access banner above,
+                 which answers "what may I do here", not "what am I editing".
+                 The label is filled by appState.updateProjectHeader() on every keystroke
+                 in #m_projectName; updateStepUI() hides the whole bar on the report step,
+                 where the report header already carries the name. -->
+            <div class="bg-chula bg-opacity-5 border border-chula-light rounded-lg px-4 py-2 mb-6 flex items-center gap-2 text-sm" id="project-title-chip-bar" data-testid="project-title-chip-bar">
+                <i class="fa-regular fa-folder-open text-chula"></i>
+                <span class="text-gray-500">กำลังแก้ไขโครงการ:</span>
+                <span class="font-semibold text-chula" id="project-title-chip">ยังไม่ได้ตั้งชื่อโครงการ</span>
             </div>
-            -->
 
             <div class="bg-white rounded-2xl shadow-md p-6 sm:p-8 flex-grow min-w-0">
                 
@@ -138,13 +307,14 @@
                                 <input type="hidden" id="m_bounds_north">
                                 <input type="hidden" id="m_bounds_west">
                                 <input type="hidden" id="m_bounds_east">
+                                <input type="hidden" id="m_boundary_selection_json" value="[]">
                             </div>
                         </div>
                         <div class="map-panel">
                             <div class="map-panel-header">
                                 <div>
                                     <h4 class="font-bold text-gray-900"><i class="fa-solid fa-map-location-dot text-chula mr-2"></i>ตำแหน่งโครงการบน OpenStreetMap</h4>
-                                    <p id="area-map-status" class="text-xs text-gray-500 mt-1">ค้นหาพื้นที่ หรือเลือกโหมดเพื่อปักหมุด/ลากคลุมพื้นที่</p>
+                                    <p id="area-map-status" class="text-xs text-gray-500 mt-1">ค้นหาพื้นที่ หรือเลือกโหมดเพื่อปักหมุด/ลากคลุมพื้นที่/เลือก boundary layer</p>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button type="button" id="map-mode-pin" onclick="appState.setMapSelectionMode('pin')" class="map-mode-button map-mode-button-active">
@@ -153,14 +323,44 @@
                                     <button type="button" id="map-mode-area" onclick="appState.setMapSelectionMode('area')" class="map-mode-button map-mode-button-idle">
                                         <i class="fa-solid fa-vector-square mr-1"></i>กำหนดพื้นที่
                                     </button>
+                                    <button type="button" id="map-mode-boundary" onclick="appState.setMapSelectionMode('boundary')" class="map-mode-button map-mode-button-idle">
+                                        <i class="fa-solid fa-draw-polygon mr-1"></i>เลือกตำบล/อำเภอ
+                                    </button>
                                 </div>
                             </div>
                             <div>
                                 <label class="form-label">ชื่อพื้นที่/ตำแหน่งที่จะแสดงในรายงาน</label>
                                 <input type="text" id="m_location_label" class="form-control" placeholder="เช่น ชุมชนสามย่าน, พื้นที่นำร่องรอบจุฬาฯ">
                             </div>
+                            <div id="boundary-controls" class="hidden space-y-3">
+                                <div class="boundary-toolbar">
+                                    <div class="min-w-[180px] flex-1">
+                                        <label class="form-label">Boundary level</label>
+                                        <select id="boundary-admin-level" class="form-control">
+                                            <option value="8">ตำบล / แขวง</option>
+                                            <option value="6">อำเภอ / เขต</option>
+                                            <option value="all">ตำบลและอำเภอ</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" onclick="appState.loadVisibleBoundaries({ force: true })" class="boundary-load-button">
+                                        <i class="fa-solid fa-rotate"></i>รีเฟรช boundary layer
+                                    </button>
+                                    <p class="boundary-toolbar-note">พิมพ์ชื่อตำบล/อำเภอเพื่อวาง shape โดยตรง หรือรีเฟรช layer ในบริเวณที่มองเห็น</p>
+                                </div>
+                                <div class="boundary-search-panel">
+                                    <label class="form-label">ค้นหาชื่อตำบล/อำเภอเพื่อวาง shape</label>
+                                    <div class="map-search-row">
+                                        <input type="search" id="boundary-search" class="form-control" placeholder="เช่น ตำบลสุเทพ, แขวงปทุมวัน, อำเภอเมืองเชียงใหม่" onkeydown="if(event.key === 'Enter'){event.preventDefault(); appState.searchBoundaryByName();}">
+                                        <button type="button" onclick="appState.searchBoundaryByName()" class="boundary-search-button">
+                                            <i class="fa-solid fa-magnifying-glass"></i>ค้นหา boundary
+                                        </button>
+                                    </div>
+                                    <div id="boundary-search-results" class="map-results hidden mt-3"></div>
+                                </div>
+                                <div id="selected-boundary-list" class="boundary-selection-list hidden"></div>
+                            </div>
                             <div id="area-search-results" class="map-results hidden"></div>
-                            <div id="area-map" class="area-map"></div>
+                            <div id="area-map" class="area-map relative z-0"></div>
                             <div class="selected-location">
                                 <div id="selected-area-location">ยังไม่ได้เลือกตำแหน่ง</div>
                                 <button type="button" onclick="appState.clearAreaLocation()" class="text-xs font-semibold text-gray-500 hover:text-red-600">
@@ -169,15 +369,71 @@
                             </div>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1">วัตถุประสงค์ (Objective)</label>
-                            <textarea id="m_objective" rows="3" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none resize-none" placeholder="ระบุวัตถุประสงค์หลักของโครงการ"></textarea>
+                            <div class="flex items-start justify-between gap-3 mb-2">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-1">วัตถุประสงค์ (Objective)</label>
+                                    <p class="text-xs text-gray-500">กรอก 1 วัตถุประสงค์ต่อ 1 ช่อง แล้วกดเพิ่มเมื่อต้องการกรอกข้อถัดไป</p>
+                                </div>
+                                <button type="button" onclick="appState.addObjective()" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-chula text-white text-sm font-semibold hover:bg-chula-dark transition-colors whitespace-nowrap">
+                                    <i class="fa-solid fa-plus"></i>เพิ่มข้อ
+                                </button>
+                            </div>
+                            <input type="hidden" id="m_objective">
+                            <div id="objective-list" class="space-y-3"></div>
+                        </div>
+
+                        <!--
+                          Researchers on this project. Shown only to the owner and admins
+                          (appState.renderMemberPanel decides).
+
+                          data-readonly-exempt keeps these inputs alive while the rest of
+                          the form is locked in read-only mode -- managing the team is not
+                          editing the assessment.
+                        -->
+                        <div id="member-panel" data-readonly-exempt data-testid="member-panel"
+                             class="hidden border border-chula-light bg-chula bg-opacity-5 rounded-xl p-4">
+                            <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                                <h4 class="font-bold text-gray-900 text-sm">
+                                    <i class="fa-solid fa-user-group text-chula mr-2"></i>ผู้ร่วมวิจัย (Researchers on this project)
+                                </h4>
+                                <span id="member-count" class="text-xs text-gray-500" data-testid="member-count"></span>
+                            </div>
+
+                            <p class="text-xs text-gray-500 mb-3">
+                                ผู้ร่วมวิจัยสามารถแก้ไขข้อมูลโครงการนี้ได้ แต่ไม่สามารถลบโครงการ
+                                (Researchers may edit this project, but cannot delete it.)
+                            </p>
+
+                            <div id="member-list" class="flex flex-wrap gap-2 mb-3" data-testid="member-list"></div>
+
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input type="email" id="member-email-input" autocomplete="off"
+                                       placeholder="อีเมลผู้ร่วมวิจัย (researcher@chula.ac.th)"
+                                       data-testid="member-email-input"
+                                       class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); appState.addProjectMember();}">
+                                <button type="button" onclick="appState.addProjectMember()"
+                                        id="member-add-btn" data-testid="member-add-btn"
+                                        class="bg-chula hover:bg-chula-dark text-white px-4 py-2 rounded-lg shadow-sm text-sm font-semibold transition-colors whitespace-nowrap">
+                                    <i class="fa-solid fa-plus mr-1"></i>เพิ่ม
+                                </button>
+                            </div>
+
+                            <p id="member-feedback" role="status" aria-live="polite"
+                               data-testid="member-feedback" class="hidden text-xs mt-2"></p>
+                            <p id="member-locked" data-testid="member-locked"
+                               class="hidden text-xs text-gray-500 mt-2">
+                                <i class="fa-solid fa-circle-info mr-1"></i>บันทึกโครงการก่อน จึงจะเพิ่มผู้ร่วมวิจัยได้
+                                (Save the project first, then add researchers.)
+                            </p>
                         </div>
                     </div>
                 </div>
 
                 <div id="step-2" class="step-content hidden fade-in">
                     <h3 class="text-2xl font-bold text-gray-900 mb-2 border-b-2 border-chula pb-2 inline-block">2. I1 ระบุเป้าหมาย SDGs</h3>
-                    <p class="text-gray-500 mb-6 text-sm">เลือกเป้าหมาย SDGs ที่สอดคล้องกับงานวิจัย เลือกได้มากกว่า 1 ข้อ และใช้เชื่อมกับ Output/Impact ในขั้นตอนถัดไป</p>
+                    <p class="text-gray-500 mb-6 text-sm">เลือกเป้าหมาย SDGs ที่สอดคล้องกับงานวิจัย เลือกได้มากกว่า 1 ข้อ แล้วเลือกหัวข้อย่อย/target ของ SDG ที่เกี่ยวข้องในแผงด้านขวา</p>
+                    <input type="hidden" id="sdg_targets_json" value="{}">
                     
                     <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 mb-6">
                         <div>
@@ -312,21 +568,30 @@
                     <h3 class="text-2xl font-bold text-gray-900 mb-2 border-b-2 border-chula pb-2 inline-block">4. การลงพื้นที่ (Site Visit)</h3>
                     <p class="text-gray-500 mb-6 text-sm">ข้อมูลเชิงประจักษ์จากการลงพื้นที่และสัมภาษณ์กลุ่มเป้าหมาย <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full ml-1">ไม่บังคับกรอก</span></p>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] gap-8">
                         <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">อัปโหลดภาพถ่ายจาก Site Visit</label>
-                            <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition cursor-pointer relative" id="photo-upload-box">
-                                <input type="file" id="sv_photo" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="appState.previewImage(event)">
-                                <div id="photo-placeholder">
-                                    <i class="fa-solid fa-cloud-arrow-up text-4xl text-gray-400 mb-2"></i>
-                                    <p class="text-sm text-gray-500">คลิก หรือ ลากไฟล์รูปภาพมาวางที่นี่</p>
+                            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700">ภาพกิจกรรม</label>
+                                    <p class="text-xs text-gray-500">อัปโหลดได้ 6 รูป อัตราส่วน 3:2 แนวนอน แนะนำ 1200×800px ขึ้นไป</p>
                                 </div>
-                                <img id="photo-preview" class="hidden max-h-48 mx-auto rounded shadow-sm" alt="Preview">
+                                <span id="activity-photo-count" class="activity-photo-count">0/6 รูป</span>
                             </div>
+                            <div id="activity-photo-grid" class="activity-photo-grid"></div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">Quote จาก Focus Group Interview</label>
-                            <textarea id="sv_quote" rows="6" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-chula outline-none resize-none text-gray-700 italic" placeholder="เช่น 'โครงการนี้ช่วยให้คนในชุมชนมีรายได้เพิ่มขึ้นจริง และลดหนี้สินได้กว่า 30%' - ตัวแทนชุมชน"></textarea>
+                        <div class="space-y-5">
+                            <div>
+                                <div class="flex items-center justify-between gap-3 mb-2">
+                                    <label class="block text-sm font-semibold text-gray-700">Focus Group: Key Takeaway</label>
+                                    <span id="sv_key_takeaway_counter" class="text-xs font-semibold text-gray-400">0/80 words</span>
+                                </div>
+                                <textarea id="sv_key_takeaway" rows="4" data-word-limit="80" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-chula outline-none resize-none text-gray-700" placeholder="สรุปสาระสำคัญสั้น ๆ จากบทสัมภาษณ์ ไม่เกิน 80 words"></textarea>
+                                <p id="sv_key_takeaway_warning" class="hidden text-xs text-red-600 mt-1">Key Takeaway ควรไม่เกิน 80 words</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Quote จาก Focus Group Interview</label>
+                                <textarea id="sv_quote" rows="6" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-chula outline-none resize-none text-gray-700 italic" placeholder="เช่น 'โครงการนี้ช่วยให้คนในชุมชนมีรายได้เพิ่มขึ้นจริง และลดหนี้สินได้กว่า 30%' - ตัวแทนชุมชน"></textarea>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -387,17 +652,26 @@
                 </div>
 
                 <div id="step-6" class="step-content hidden fade-in">
-                    <div class="flex justify-between items-center mb-4">
+                    <!--
+                      No save button here, by design: step 6 is only ever reached after
+                      confirmAndSave() has already run from the step-5 recheck modal, so
+                      there is nothing left to save. "แก้ไขข้อมูล" is the only way back
+                      into editing (appState.enableEditMode()), matching feature/nan.
+                    -->
+                    <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                         <h3 class="text-2xl font-bold text-gray-900 border-b-2 border-chula pb-2 inline-block">6. รายงานผลประเมิน SROI</h3>
-                        <button onclick="appState.exportPDF()" class="bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-lg shadow-md transition-colors">
-                            <i class="fa-solid fa-file-pdf mr-2 text-red-400"></i>ส่งออกเป็น PDF
-                        </button>
-                        <button id="btn-save-assessment" onclick="appState.confirmAndSave()" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4">
-                            บันทึกผลประเมิน <i class="fa-solid fa-floppy-disk ml-2"></i>
-                        </button>
-                        <a href="dashboard.html" class="bg-gray-500 hover:bg-gray-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors ml-4">
-                            กลับหน้าหลัก <i class="fa-solid fa-house ml-2"></i>
-                        </a>
+                        <div class="flex flex-wrap gap-2">
+                            <a href="dashboard.html" class="bg-gray-500 hover:bg-gray-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors">
+                                กลับหน้าหลัก <i class="fa-solid fa-house ml-2"></i>
+                            </a>
+                            <button onclick="appState.exportPDF()" class="bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-lg shadow-md transition-colors">
+                                <i class="fa-solid fa-file-pdf mr-2 text-red-400"></i>ส่งออกเป็น PDF
+                            </button>
+                            <button id="btn-edit-assessment" onclick="appState.enableEditMode()" data-testid="btn-edit-assessment"
+                                    class="hidden bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors">
+                                แก้ไขข้อมูล <i class="fa-solid fa-pen-to-square ml-2"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div id="report-container" class="print-friendly mt-4 space-y-4">
@@ -412,6 +686,10 @@
                                     <p class="text-gray-400 text-xs">
                                         <span id="r_responsible">-</span> &middot; <span id="r_area">-</span>
                                     </p>
+                                    <!-- Inside #report-container, so exportPDF() carries it
+                                         into the PDF with no extra work. -->
+                                    <p class="text-gray-400 text-xs mt-0.5" id="r_updated_meta" data-testid="report-updated-meta"></p>
+                                    <p class="text-gray-400 text-xs" id="r_team" data-testid="report-team"></p>
                                 </div>
                             </div>
                             <p class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100"><span id="r_objective">-</span></p>
@@ -430,16 +708,12 @@
                                     <span id="r_val_invest" class="font-mono font-medium text-sm text-gray-900">0.00</span>
                                 </div>
                                 <div class="flex items-center justify-between px-4 py-2.5">
-                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-chart-line text-chula w-3 text-xs"></i>มูลค่าปัจจุบันของผลลัพธ์</span>
-                                    <span id="r_val_outcome" class="font-mono font-medium text-sm text-gray-900">0.00</span>
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-chart-line text-chula w-3 text-xs"></i>Total Present Value (PV)</span>
+                                    <span id="r_val_total_pv" class="font-mono font-medium text-sm text-gray-900">0.00</span>
                                 </div>
                                 <div class="flex items-center justify-between px-4 py-2.5">
-                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-minus text-red-400 w-3 text-xs"></i>หัก กรณีฐาน (Base Case)</span>
-                                    <span id="r_val_base" class="font-mono font-medium text-sm text-red-500">- 0.00</span>
-                                </div>
-                                <div class="flex items-center justify-between px-4 py-2.5">
-                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-3 text-xs"></i>มูลค่าผลลัพธ์สุทธิ</span>
-                                    <span id="r_val_net_outcome" class="font-mono font-medium text-sm text-green-600">0.00</span>
+                                    <span class="text-xs text-gray-500 flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-3 text-xs"></i>Net Present Value (NPV)</span>
+                                    <span id="r_val_npv" class="font-mono font-medium text-sm text-green-600">0.00</span>
                                 </div>
                             </div>
                         </div>
@@ -449,29 +723,28 @@
                                 <h4 class="font-bold text-gray-800 border-l-4 border-chula pl-2 mb-3 text-sm">ห่วงโซ่ผลกระทบ (Impact Pathway)</h4>
                                 <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-xs mb-4">
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ทรัพยากรบุคคล</strong>
-                                        <span id="r_manpower" class="text-gray-700">-</span>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Inputs</strong>
+                                        <span id="r_inputs" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">งบประมาณ</strong>
-                                        <span id="r_budget" class="text-gray-700">-</span>
-                                    </div>
-                                    
-                                    <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">กิจกรรม</strong>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Activities</strong>
                                         <span id="r_activities" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลผลิต</strong>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Outputs</strong>
                                         <span id="r_output" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลลัพธ์</strong>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Outcomes</strong>
                                         <span id="r_outcome" class="text-gray-700">-</span>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
-                                        <strong class="block text-[11px] text-gray-400 font-medium">ผลกระทบ</strong>
-                                        <span id="r_impact" class="text-gray-700">-</span>
+                                        <strong class="block text-[11px] text-gray-400 font-medium">Impacts</strong>
+                                        <span id="r_impact_economic" class="text-gray-700">-</span>
+                                    </div>
+                                    <div class="pb-1.5 border-b border-gray-100">
+                                        <strong class="block text-[11px] text-gray-400 font-medium">TOC Statement</strong>
+                                        <span id="r_toc_statement" class="text-gray-700">-</span>
                                     </div>
                                 </div>
                                 <div class="pt-3 border-t border-gray-100">
@@ -492,7 +765,7 @@
                         </div>
 
                         <div class="text-center text-xs text-gray-400">
-                            เอกสารสร้างโดยระบบประเมิน SROI จุฬาลงกรณ์มหาวิทยาลัย
+                            เอกสารสร้างโดย Chula Triple S System, จุฬาลงกรณ์มหาวิทยาลัย
                         </div>
                     </div>
                 </div>
@@ -501,17 +774,63 @@
                     <button id="btn-prev" onclick="appState.prevStep()" class="hidden px-6 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium">
                         <i class="fa-solid fa-arrow-left mr-2"></i>ย้อนกลับ
                     </button>
-                    <div class="flex-grow"></div>
+                    <!-- Desktop-only, and deliberately 'hidden sm:flex': updateStepUI()
+                         shows and hides it by toggling sm:flex, never by removing
+                         'hidden'. See the comment there before changing these classes. -->
+                    <div class="flex-grow flex justify-center">
+                        <button id="btn-save-step" onclick="appState.saveCurrentStepLocal()" data-testid="btn-save-step" class="hidden sm:flex items-center px-6 py-2 border-2 border-chula text-chula rounded-lg hover:bg-chula-light hover:text-white transition-colors font-semibold">
+                            <i class="fa-solid fa-floppy-disk mr-2"></i>บันทึกข้อมูลหน้านี้ (Save Step)
+                        </button>
+                    </div>
+
                     <button id="btn-next" onclick="appState.nextStep()" class="px-6 py-2 bg-chula hover:bg-chula-dark text-white rounded-lg shadow transition-colors font-medium">
                         ถัดไป <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+
+                    <!-- Replaces btn-next on step 5, for editors only. -->
+                    <button id="btn-final-save" onclick="appState.showRecheckModal()" data-testid="btn-final-save" class="hidden px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition-colors font-bold">
+                        สรุปผลเป็นรายงาน <i class="fa-solid fa-clipboard-check ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RECHECK MODAL: the report, shown for approval before anything is written.
+             z-[1100] clears Leaflet's map panes and controls, which sit at z-index 400-1000
+             and otherwise punch through the backdrop on step 1. -->
+        <div id="recheck-modal" data-testid="recheck-modal" class="fixed inset-0 z-[1100] hidden bg-gray-900 bg-opacity-60 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col transform transition-all">
+                <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center text-white text-lg shadow-sm">
+                            <i class="fa-solid fa-clipboard-check"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 leading-tight">ตรวจสอบข้อมูล (Recheck Assessment)</h3>
+                            <p class="text-xs text-gray-500 mt-1">กรุณาตรวจสอบความถูกต้องของข้อมูลทั้งหมด ก่อนยืนยันบันทึกเข้าระบบ</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="appState.hideRecheckModal()" aria-label="ปิด" class="text-gray-400 hover:text-gray-600 bg-white hover:bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow bg-white" id="modal-report-content"></div>
+                <div class="p-5 border-t border-gray-200 bg-gray-50 flex justify-end gap-4 rounded-b-2xl">
+                    <button type="button" onclick="appState.hideRecheckModal()" class="px-6 py-2.5 border border-gray-300 text-gray-700 bg-white rounded-xl hover:bg-gray-50 font-semibold shadow-sm transition-colors">
+                        กลับไปแก้ไข
+                    </button>
+                    <button type="button" id="modal-btn-confirm" onclick="appState.confirmAndSave()" data-testid="modal-btn-confirm" class="px-8 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center">
+                        ยืนยัน <i class="fa-solid fa-cloud-arrow-up ml-2"></i>
                     </button>
                 </div>
             </div>
         </div>
     </main>
 
-    <footer class="bg-white border-t border-gray-200 mt-auto py-4 text-center text-xs text-gray-500">
-        &copy; 2026 Chulalongkorn University. SROI Evaluation Prototype. All rights reserved.
+    <footer class="bg-white border-t border-gray-200 mt-auto py-4 text-xs text-gray-500 text-center">
+        <!-- "ติดต่อเรา" link hidden along with the nav's About/Help links -- see the
+             comment above #landing-nav in <header>. Same scrollToIntro() bug. -->
+        &copy; 2026 Chulalongkorn University. Chula Triple S System. All rights reserved.
     </footer>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
