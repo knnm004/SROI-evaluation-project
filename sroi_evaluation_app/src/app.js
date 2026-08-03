@@ -565,6 +565,46 @@ export const appState = {
         document.getElementById('view-app').classList.add('hidden');
         document.getElementById(viewId).classList.remove('hidden');
         this.currentView = viewId;
+
+        if (viewId === 'view-landing') this.initLandingCarousel();
+    },
+
+    carouselTimer: null,
+
+    // Landing page's rotating banner. Guarded by carouselTimer so re-entering
+    // view-landing (e.g. "กลับหน้าหลัก" from the member sign-in form) doesn't stack
+    // a second interval on top of the first, doubling the rotation speed.
+    initLandingCarousel() {
+        const slides = document.querySelectorAll('#landing-carousel [data-carousel-slide]');
+        const dotsContainer = document.getElementById('landing-carousel-dots');
+        if (!slides.length || !dotsContainer) return;
+
+        if (this.carouselTimer) return; // already running
+
+        let active = 0;
+        const dots = slides.length > 1
+            ? Array.from(slides).map((_, index) => {
+                const dot = document.createElement('button');
+                dot.type = 'button';
+                dot.setAttribute('aria-label', `Slide ${index + 1}`);
+                dot.className = 'w-2 h-2 rounded-full transition-colors ' + (index === 0 ? 'bg-white' : 'bg-white/50');
+                dot.onclick = () => showSlide(index);
+                dotsContainer.appendChild(dot);
+                return dot;
+            })
+            : [];
+
+        const showSlide = (index) => {
+            slides[active].classList.replace('opacity-100', 'opacity-0');
+            dots[active]?.classList.replace('bg-white', 'bg-white/50');
+            active = index;
+            slides[active].classList.replace('opacity-0', 'opacity-100');
+            dots[active]?.classList.replace('bg-white/50', 'bg-white');
+        };
+
+        this.carouselTimer = window.setInterval(() => {
+            showSlide((active + 1) % slides.length);
+        }, 4000);
     },
 
     async login() {
@@ -1061,29 +1101,6 @@ export const appState = {
         });
         document.querySelectorAll('[data-pathway-tab]').forEach(tab => {
             const active = tab.dataset.pathwayTab === panelId;
-            tab.classList.toggle('framework-tab-active', active);
-            tab.classList.toggle('framework-tab-idle', !active);
-        });
-    },
-
-    // Landing nav's "เกี่ยวกับระบบ" / "ช่วยเหลือ" links: open the About panel (it also
-    // holds the contact email) and scroll it into view, rather than pointing at pages
-    // that don't exist.
-    scrollToIntro() {
-        const details = document.getElementById('intro-details');
-        if (!details) return;
-        details.open = true;
-        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
-
-    // Landing page's collapsed "เกี่ยวกับระบบนี้" panel: one language block visible
-    // at a time instead of both full Thai and English copies stacked together.
-    showIntroLang(lang) {
-        document.querySelectorAll('[data-intro-lang]').forEach(panel => {
-            panel.classList.toggle('hidden', panel.dataset.introLang !== lang);
-        });
-        document.querySelectorAll('[data-intro-tab]').forEach(tab => {
-            const active = tab.dataset.introTab === lang;
             tab.classList.toggle('framework-tab-active', active);
             tab.classList.toggle('framework-tab-idle', !active);
         });
