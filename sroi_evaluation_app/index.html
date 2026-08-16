@@ -17,12 +17,16 @@
     <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
-                <div class="flex items-center justify-between flex-1 gap-3 cursor-pointer mr-4" onclick="appState.goHome()">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="appState.goHome()">
                     <img src="/images/chula-logo.png" alt="Chulalongkorn University" class="h-11 w-auto shrink-0 object-contain">
-                    <!-- No subtitle here: the logo itself already spells out
-                         "Chulalongkorn University", so repeating it as text was
+                    <!-- No "Chulalongkorn University" subtitle here: the logo itself
+                         already spells that out, so repeating it as text was
                          redundant right next to it. -->
-                    <h1 class="font-bold text-lg leading-tight text-gray-900">Chula Triple S System</h1>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-sm text-gray-600 font-semibold hidden sm:inline whitespace-nowrap">ระบบประเมินผลตอบแทนทางสังคม</span>
+                        <span class="hidden sm:block w-px h-5 bg-gray-300 shrink-0" aria-hidden="true"></span>
+                        <h1 class="font-bold text-lg leading-tight text-gray-900 whitespace-nowrap">Chula Triple S System</h1>
+                    </div>
                 </div>
                 <nav id="landing-nav" class="hidden md:flex items-center gap-6 text-sm font-medium text-gray-500">
                     <a href="/index.html" class="hover:text-chula-dark transition-colors">หน้าหลัก</a>
