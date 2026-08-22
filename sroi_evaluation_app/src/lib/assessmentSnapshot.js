@@ -28,9 +28,9 @@ export const SNAPSHOT_VERSION = 2;
  * selector. These two sit inside #view-app and so must be named:
  *   sdg-search          - the SDG filter box
  *   member-email-input  - the "add a researcher" box; a half-typed colleague's
- *                         address must never be persisted into the assessment
+ *   member-name-input     address/name must never be persisted into the assessment
  */
-const TRANSIENT_FIELD_IDS = new Set(['sdg-search', 'member-email-input', 'boundary-search', 'boundary-admin-level']);
+const TRANSIENT_FIELD_IDS = new Set(['sdg-search', 'member-email-input', 'member-name-input', 'boundary-search', 'boundary-admin-level']);
 
 /**
  * Read the whole form into a plain object. The ONLY reader.

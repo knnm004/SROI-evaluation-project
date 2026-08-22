@@ -261,12 +261,70 @@
                             <label class="block text-sm font-semibold text-gray-700 mb-1">ชื่อโครงการ (Project Name)</label>
                             <input type="text" id="m_projectName" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none" placeholder="ระบุชื่อโครงการวิจัย">
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">ผู้รับผิดชอบโครงการ (Responsible)</label>
-                                <input type="text" id="m_responsible" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none" placeholder="ชื่อ-นามสกุล / คณะ">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">ผู้รับผิดชอบโครงการ (Responsible)</label>
+                            <input type="text" id="m_responsible" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none" placeholder="ชื่อ-นามสกุล / คณะ">
+                        </div>
+
+                        <!--
+                          Researchers on this project. Shown only to the owner and admins
+                          (appState.renderMemberPanel decides). Placed right under
+                          "ผู้รับผิดชอบโครงการ" since both are about who's involved in the
+                          project, ahead of the much longer พื้นที่ดำเนินการ/map section.
+
+                          data-readonly-exempt keeps these inputs alive while the rest of
+                          the form is locked in read-only mode -- managing the team is not
+                          editing the assessment.
+                        -->
+                        <div id="member-panel" data-readonly-exempt data-testid="member-panel"
+                             class="hidden border border-chula-light bg-chula bg-opacity-5 rounded-xl p-4">
+                            <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                                <h4 class="font-bold text-gray-900 text-sm">
+                                    <i class="fa-solid fa-user-group text-chula mr-2"></i>ผู้ร่วมวิจัย (Researchers on this project)
+                                </h4>
+                                <span id="member-count" class="text-xs text-gray-500" data-testid="member-count"></span>
                             </div>
-                            <div class="md:col-span-2">
+
+                            <p class="text-xs text-gray-500 mb-3">
+                                ผู้ร่วมวิจัยสามารถแก้ไขข้อมูลโครงการนี้ได้ แต่ไม่สามารถลบโครงการ
+                                (Researchers may edit this project, but cannot delete it.)
+                            </p>
+
+                            <div id="member-list" class="flex flex-wrap gap-2 mb-3" data-testid="member-list"></div>
+
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input type="text" id="member-name-input" autocomplete="off"
+                                       placeholder="ชื่อผู้ร่วมวิจัย (ไม่บังคับ)"
+                                       data-testid="member-name-input"
+                                       class="sm:w-48 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); appState.addProjectMember();}">
+                                <input type="email" id="member-email-input" autocomplete="off"
+                                       placeholder="อีเมลผู้ร่วมวิจัย (researcher@chula.ac.th)"
+                                       data-testid="member-email-input"
+                                       class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); appState.addProjectMember();}">
+                                <button type="button" onclick="appState.addProjectMember()"
+                                        id="member-add-btn" data-testid="member-add-btn"
+                                        class="bg-chula hover:bg-chula-dark text-white px-4 py-2 rounded-lg shadow-sm text-sm font-semibold transition-colors whitespace-nowrap">
+                                    <i class="fa-solid fa-plus mr-1"></i>เพิ่ม
+                                </button>
+                            </div>
+
+                            <p id="member-feedback" role="status" aria-live="polite"
+                               data-testid="member-feedback" class="hidden text-xs mt-2"></p>
+                            <p id="member-locked" data-testid="member-locked"
+                               class="hidden text-xs text-gray-500 mt-2">
+                                <i class="fa-solid fa-circle-info mr-1"></i>โครงการนี้จะถูกสร้างเมื่อกดบันทึกในภายหลัง ผู้ร่วมวิจัยที่เพิ่มไว้จะถูกเชิญเข้าร่วมทันทีที่บันทึกสำเร็จ
+                                (This project will be created when you save. Anyone added here is invited as soon as the save succeeds.)
+                            </p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">หน่วยงาน (Department/Organization)</label>
+                            <input type="text" id="m_department" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none" placeholder="เช่น คณะครุศาสตร์, ภาควิชา...">
+                        </div>
+
+                        <div>
                                 <label class="block text-sm font-semibold text-gray-700 mb-1">พื้นที่ดำเนินการ (Working Area)</label>
                                 <div class="map-search-row">
                                     <div class="relative flex-1">
@@ -288,7 +346,6 @@
                                 <input type="hidden" id="m_bounds_east">
                                 <input type="hidden" id="m_boundary_selection_json" value="[]">
                             </div>
-                        </div>
                         <div class="map-panel">
                             <div class="map-panel-header">
                                 <div>
@@ -359,52 +416,6 @@
                             </div>
                             <input type="hidden" id="m_objective">
                             <div id="objective-list" class="space-y-3"></div>
-                        </div>
-
-                        <!--
-                          Researchers on this project. Shown only to the owner and admins
-                          (appState.renderMemberPanel decides).
-
-                          data-readonly-exempt keeps these inputs alive while the rest of
-                          the form is locked in read-only mode -- managing the team is not
-                          editing the assessment.
-                        -->
-                        <div id="member-panel" data-readonly-exempt data-testid="member-panel"
-                             class="hidden border border-chula-light bg-chula bg-opacity-5 rounded-xl p-4">
-                            <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                                <h4 class="font-bold text-gray-900 text-sm">
-                                    <i class="fa-solid fa-user-group text-chula mr-2"></i>ผู้ร่วมวิจัย (Researchers on this project)
-                                </h4>
-                                <span id="member-count" class="text-xs text-gray-500" data-testid="member-count"></span>
-                            </div>
-
-                            <p class="text-xs text-gray-500 mb-3">
-                                ผู้ร่วมวิจัยสามารถแก้ไขข้อมูลโครงการนี้ได้ แต่ไม่สามารถลบโครงการ
-                                (Researchers may edit this project, but cannot delete it.)
-                            </p>
-
-                            <div id="member-list" class="flex flex-wrap gap-2 mb-3" data-testid="member-list"></div>
-
-                            <div class="flex flex-col sm:flex-row gap-2">
-                                <input type="email" id="member-email-input" autocomplete="off"
-                                       placeholder="อีเมลผู้ร่วมวิจัย (researcher@chula.ac.th)"
-                                       data-testid="member-email-input"
-                                       class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none"
-                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); appState.addProjectMember();}">
-                                <button type="button" onclick="appState.addProjectMember()"
-                                        id="member-add-btn" data-testid="member-add-btn"
-                                        class="bg-chula hover:bg-chula-dark text-white px-4 py-2 rounded-lg shadow-sm text-sm font-semibold transition-colors whitespace-nowrap">
-                                    <i class="fa-solid fa-plus mr-1"></i>เพิ่ม
-                                </button>
-                            </div>
-
-                            <p id="member-feedback" role="status" aria-live="polite"
-                               data-testid="member-feedback" class="hidden text-xs mt-2"></p>
-                            <p id="member-locked" data-testid="member-locked"
-                               class="hidden text-xs text-gray-500 mt-2">
-                                <i class="fa-solid fa-circle-info mr-1"></i>บันทึกโครงการก่อน จึงจะเพิ่มผู้ร่วมวิจัยได้
-                                (Save the project first, then add researchers.)
-                            </p>
                         </div>
                     </div>
                 </div>
