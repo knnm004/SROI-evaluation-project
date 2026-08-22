@@ -3483,6 +3483,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         appState.showView('view-app');
         document.getElementById('user-email-display').innerText = identity.email;
         document.getElementById('nav-user').classList.remove('hidden');
+        // Public marketing/info page -- not useful once already inside the app.
+        document.getElementById('about-nav-link')?.classList.add('hidden');
         initializeNewProject(identity, urlParams.get('fresh') !== '0');
 
         const requestedStep = Number(urlParams.get('step'));
@@ -3522,6 +3524,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         document.getElementById('user-email-display').innerText = identity.email;
         document.getElementById('nav-user').classList.remove('hidden');
+        // Public marketing/info page -- not useful once already inside the app.
+        document.getElementById('about-nav-link')?.classList.add('hidden');
 
         if (projectId) {
             await loadExistingProject(projectId, identity, resumeDraft);
