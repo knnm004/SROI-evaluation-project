@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เกี่ยวกับระบบ - Chula Triple S System</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Noto+Sans+Mende+Kikakui&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
+
+    <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <a href="/index.html" class="flex items-center gap-3">
+                    <img src="/images/chula-logo.png" alt="Chulalongkorn University" class="h-11 w-auto shrink-0 object-contain">
+                    <div class="flex flex-col min-w-0 leading-tight">
+                        <h1 class="text-base font-bold text-gray-900 whitespace-nowrap">ระบบประเมินผลตอบแทนทางสังคม</h1>
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">Chula Triple S System</span>
+                    </div>
+                </a>
+                <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-gray-500">
+                    <a href="/index.html" class="hover:text-chula-dark transition-colors">หน้าหลัก</a>
+                    <a href="/about.html" class="text-chula-dark font-semibold">เกี่ยวกับระบบ</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow w-full max-w-3xl mx-auto p-4 sm:p-6 py-10">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-full bg-chula bg-opacity-10 text-chula flex items-center justify-center">
+                <i class="fa-solid fa-circle-info"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900">เกี่ยวกับระบบนี้ (About Chula Triple S System)</h2>
+        </div>
+
+        <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram"
+             class="w-full max-w-sm mx-auto mb-6">
+
+        <div class="bg-white border border-gray-200 rounded-2xl p-5 sm:p-8 shadow-sm">
+            <div class="flex gap-2 mb-5">
+                <button type="button" onclick="showIntroLang('th')" data-intro-tab="th"
+                        data-testid="intro-tab-th" class="framework-tab framework-tab-active">ภาษาไทย</button>
+                <button type="button" onclick="showIntroLang('en')" data-intro-tab="en"
+                        data-testid="intro-tab-en" class="framework-tab framework-tab-idle">English</button>
+            </div>
+
+            <div data-intro-lang="th" class="text-sm sm:text-base text-gray-600 leading-relaxed space-y-4">
+                <p>Chula Triple S System คือระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย ออกแบบสำหรับผู้บริหาร นักวิชาการ และนักวิจัย เพื่อช่วยวิเคราะห์เส้นทางการสร้างผลกระทบ กำหนดผลลัพธ์และตัวชี้วัด ติดตามการเปลี่ยนแปลงที่เกิดขึ้น และเชื่อมโยงผลงานกับเป้าหมายการพัฒนาที่ยั่งยืน (SDGs)</p>
+                <p>ระบบช่วยเปลี่ยนข้อมูลจากการดำเนินโครงการให้เป็นหลักฐานเชิงประจักษ์สำหรับพัฒนางาน ขยายผล และนำองค์ความรู้จากการวิจัยและนวัตกรรมไปแก้ไขปัญหาสังคมอย่างยั่งยืน ขณะเดียวกันผู้บริหารสามารถใช้ข้อมูลประกอบการกำหนดนโยบาย จัดสรรทรัพยากร และตัดสินใจเชิงยุทธศาสตร์ เพื่อยกระดับผลกระทบทางสังคมของมหาวิทยาลัยให้เกิดคุณค่าอย่างเป็นรูปธรรม</p>
+                <p>ผู้บริหาร นักวิชาการ นักวิจัย และหน่วยงานที่สนใจแลกเปลี่ยนองค์ความรู้ เรียนรู้แนวทางการประเมินผลกระทบทางสังคม หรือนำ Chula Triple S System ไปประยุกต์ใช้และต่อยอด เพื่อยกระดับคุณค่าจากงานวิจัย นวัตกรรม และบริการวิชาการ</p>
+                <p>ติดต่อเพื่อขอข้อมูลเพิ่มเติมได้ที่ [email]</p>
+            </div>
+
+            <div data-intro-lang="en" class="hidden text-sm sm:text-base text-gray-600 leading-relaxed space-y-4">
+                <p>Chula Triple S System is an integrated platform for assessing and managing the social impact of research, innovation, and academic service projects at Chulalongkorn University. Designed for university leaders, academics, and researchers, the system supports impact pathway analysis, outcome and indicator development, change tracking, and alignment with the Sustainable Development Goals (SDGs).</p>
+                <p>The system transforms project data into actionable evidence for improving performance, scaling successful initiatives, and applying research and innovation to sustainable social development. It also enables university leaders to make evidence-informed decisions on policy, resource allocation, and institutional strategy strengthening the university's capacity to create meaningful and measurable social impact.</p>
+                <p>University leaders, academics, researchers, and organisations interested in exchanging and expanding knowledge, learning about social impact assessment, or applying and further developing the Chula Triple S System to enhance the value and impact of research, innovation, and academic services are welcome to</p>
+                <p>Contact us for further information at [email].</p>
+            </div>
+
+            <div data-intro-lang="th" class="mt-6 pt-3 border-t border-gray-100 text-[11px] leading-relaxed text-gray-400 grid sm:grid-cols-2 gap-3">
+                <div>
+                    <p class="font-semibold text-gray-500 mb-0.5">ผู้จัดทำ</p>
+                    <ul class="space-y-0.5">
+                        <li>ผศ.ดร.ฐิติรัตน์ ปั้นบำรุงกิจ</li>
+                        <li>รศ.ดร.ณัฏฐภรณ์ หลาวทอง</li>
+                        <li>ผศ.ดร.ศรเนตร อารีโสภณพิเชฐ</li>
+                    </ul>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-500 mb-0.5">ผู้ออกแบบและพัฒนาแพลตฟอร์ม</p>
+                    <ul class="space-y-0.5">
+                        <li>คณิศร ถานะวุฒิพงศ์</li>
+                        <li>ธนวัฒน์ ไตรพัชร์</li>
+                        <li>ธาลิสสา จุลชู</li>
+                        <li>นิปุณ อังควิชัย</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div data-intro-lang="en" class="hidden mt-6 pt-3 border-t border-gray-100 text-[11px] leading-relaxed text-gray-400 grid sm:grid-cols-2 gap-3">
+                <div>
+                    <p class="font-semibold text-gray-500 mb-0.5">Authors</p>
+                    <ul class="space-y-0.5">
+                        <li>Asst. Prof. Dr. Thitirat Panbamrungkij</li>
+                        <li>Assoc. Prof. Dr. Nuttaporn Lawthong</li>
+                        <li>Asst. Prof. Dr. Sornnate Areesophonpichet</li>
+                    </ul>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-500 mb-0.5">Design &amp; Development Team</p>
+                    <ul class="space-y-0.5">
+                        <li>Kanisorn Tanawuttipong</li>
+                        <li>Thanawat Traipat</li>
+                        <li>Thalissa Julchoo</li>
+                        <li>Nipun Angkavichai</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 text-center">
+            <a href="/index.html" class="text-sm font-semibold text-chula-darker hover:underline">
+                <i class="fa-solid fa-arrow-left mr-1"></i> กลับหน้าหลัก
+            </a>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t border-gray-200 mt-auto py-4 text-xs text-gray-500 text-center">
+        &copy; 2026 Chulalongkorn University. Chula Triple S System. All rights reserved.
+    </footer>
+
+    <script type="module" src="/src/about.js"></script>
+</body>
+</html>

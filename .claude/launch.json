@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sroi-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "sroi_evaluation_app", "run", "dev"],
+      "port": 5173
+    }
+  ]
+}

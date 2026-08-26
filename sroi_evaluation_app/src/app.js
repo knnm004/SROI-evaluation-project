@@ -291,6 +291,12 @@ export const appState = {
     // Filled by applyProjectAccess(). These shape the UI only -- RLS enforces.
     identity: null,
     projectMeta: null,
+    // Researcher emails queued while creating a brand-new (not yet saved) project --
+    // there is no project id yet for add_project_researcher() to attach to. Invited for
+    // real by saveProjectData()'s insert branch right after the row is created, then
+    // cleared. In-memory only: does not survive a page reload (not part of the local
+    // draft shape), only the current creation session.
+    pendingMembers: [],
     projectAccess: {
         canEdit: false,
         canDelete: false,
@@ -362,13 +368,18 @@ export const appState = {
         const addBtn = document.getElementById('member-add-btn');
         const locked = document.getElementById('member-locked');
 
-        // You cannot attach researchers to a project that has no row yet.
+        // Unsaved project: no row to attach a researcher to yet, so addProjectMember()
+        // queues emails in this.pendingMembers instead of calling the RPC -- the add
+        // input/button stay enabled (only #member-locked's wording changes, in
+        // index.html, to explain they're invited once the project is saved).
         const unsaved = !projectId;
-        if (input) input.disabled = unsaved;
-        if (addBtn) addBtn.disabled = unsaved;
+        if (input) input.disabled = false;
+        if (addBtn) addBtn.disabled = false;
         locked?.classList.toggle('hidden', !unsaved);
 
-        const members = this.projectMeta?.project_members ?? [];
+        const members = unsaved
+            ? this.pendingMembers.map(m => ({ member_email: m.email, member_name: m.name, queued: true }))
+            : (this.projectMeta?.project_members ?? []);
         const list = document.getElementById('member-list');
         const count = document.getElementById('member-count');
 
@@ -387,15 +398,21 @@ export const appState = {
             return;
         }
 
-        // Chips hold other people's addresses, so everything is escaped.
+        // Chips hold other people's names/addresses, so everything is escaped.
         list.innerHTML = members.map(member => {
             const email = String(member.member_email ?? '');
-            const pending = !member.user_id;
+            const name = String(member.member_name ?? '').trim();
+            // "queued" = added before the project exists, invited on first save.
+            // "pending" = already invited, just hasn't signed in for the first time yet.
+            // Different situations, so a different label/color each.
+            const queued = !!member.queued;
+            const pending = !queued && !member.user_id;
             return `
                 <span class="inline-flex items-center gap-2 bg-white border ${
-                    pending ? 'border-yellow-300' : 'border-gray-200'
+                    queued ? 'border-blue-200' : pending ? 'border-yellow-300' : 'border-gray-200'
                 } rounded-full pl-3 pr-1 py-1 text-xs" data-testid="member-chip">
-                    <span class="font-medium text-gray-700">${escapeHTML(email)}</span>
+                    <span class="font-medium text-gray-700">${name ? `${escapeHTML(name)} &lt;${escapeHTML(email)}&gt;` : escapeHTML(email)}</span>
+                    ${queued ? '<span class="text-blue-600">(จะเชิญเมื่อบันทึก)</span>' : ''}
                     ${pending ? '<span class="text-yellow-600">(รอเข้าสู่ระบบ)</span>' : ''}
                     <button type="button" title="นำออกจากโครงการ"
                             data-testid="member-remove-btn"
@@ -419,10 +436,12 @@ export const appState = {
         if (!this.projectAccess.canManageMembers) return;
 
         const projectId = this.getProjectId();
+        const nameInput = document.getElementById('member-name-input');
         const input = document.getElementById('member-email-input');
-        if (!projectId || !input) return;
+        if (!input) return;
 
         const email = input.value.trim().toLowerCase();
+        const name = (nameInput?.value ?? '').trim();
 
         // Cheap local checks first, so obvious mistakes cost no round trip.
         if (!email || !input.checkValidity()) {
@@ -433,6 +452,23 @@ export const appState = {
             this.showMemberFeedback('คุณเป็นเจ้าของโครงการนี้อยู่แล้ว (You already own this project)', 'error');
             return;
         }
+
+        // No project row yet -- queue locally, invite for real once saveProjectData()'s
+        // insert branch creates the row (see saveProjectData()). No RPC to call: there
+        // is no project id for add_project_researcher() to attach to.
+        if (!projectId) {
+            if (this.pendingMembers.some(m => m.email === email)) {
+                this.showMemberFeedback('อีเมลนี้อยู่ในรายชื่อแล้ว (Already queued)', 'error');
+                return;
+            }
+            this.pendingMembers.push({ name, email });
+            if (nameInput) nameInput.value = '';
+            input.value = '';
+            this.showMemberFeedback(`จะเชิญ ${email} เป็นผู้ร่วมวิจัยเมื่อบันทึกโครงการ`, 'ok');
+            this.renderMemberPanel();
+            return;
+        }
+
         if ((this.projectMeta?.project_members ?? []).some(
             m => String(m.member_email ?? '').toLowerCase() === email)) {
             this.showMemberFeedback('อีเมลนี้เป็นผู้ร่วมวิจัยอยู่แล้ว (Already a researcher on this project)', 'error');
@@ -466,6 +502,18 @@ export const appState = {
         );
 
         if (status === 'added' || status === 'invited') {
+            // Name is stored separately (set_project_researcher_name, see
+            // supabase/migrations/0002_project_members_name.sql) -- add_project_researcher
+            // itself only ever took an email, so this keeps that function untouched.
+            if (name) {
+                const { error: nameError } = await supabase.rpc('set_project_researcher_name', {
+                    p_project_id: projectId,
+                    p_email: email,
+                    p_name: name
+                });
+                if (nameError) console.error('Could not save researcher name:', nameError);
+            }
+            if (nameInput) nameInput.value = '';
             input.value = '';
             await this.refreshProjectMembers();
         }
@@ -473,9 +521,17 @@ export const appState = {
 
     async removeProjectMember(email) {
         if (!this.projectAccess.canManageMembers) return;
+        if (!email) return;
 
         const projectId = this.getProjectId();
-        if (!projectId || !email) return;
+
+        // Nothing was committed yet -- just drop it from the local queue, no RPC,
+        // no confirm needed for something that was never actually saved.
+        if (!projectId) {
+            this.pendingMembers = this.pendingMembers.filter(queued => queued.email !== email);
+            this.renderMemberPanel();
+            return;
+        }
 
         if (!confirm(`นำ ${email} ออกจากโครงการนี้?\n(Remove this researcher from the project?)`)) return;
 
@@ -504,7 +560,7 @@ export const appState = {
 
         const { data, error } = await supabase
             .from('project_members')
-            .select('user_id, member_email, added_at')
+            .select('user_id, member_email, member_name, added_at')
             .eq('project_id', projectId);
 
         if (error) {
@@ -565,6 +621,46 @@ export const appState = {
         document.getElementById('view-app').classList.add('hidden');
         document.getElementById(viewId).classList.remove('hidden');
         this.currentView = viewId;
+
+        if (viewId === 'view-landing') this.initLandingCarousel();
+    },
+
+    carouselTimer: null,
+
+    // Landing page's rotating banner. Guarded by carouselTimer so re-entering
+    // view-landing (e.g. "กลับหน้าหลัก" from the member sign-in form) doesn't stack
+    // a second interval on top of the first, doubling the rotation speed.
+    initLandingCarousel() {
+        const slides = document.querySelectorAll('#landing-carousel [data-carousel-slide]');
+        const dotsContainer = document.getElementById('landing-carousel-dots');
+        if (!slides.length || !dotsContainer) return;
+
+        if (this.carouselTimer) return; // already running
+
+        let active = 0;
+        const dots = slides.length > 1
+            ? Array.from(slides).map((_, index) => {
+                const dot = document.createElement('button');
+                dot.type = 'button';
+                dot.setAttribute('aria-label', `Slide ${index + 1}`);
+                dot.className = 'w-2 h-2 rounded-full transition-colors ' + (index === 0 ? 'bg-white' : 'bg-white/50');
+                dot.onclick = () => showSlide(index);
+                dotsContainer.appendChild(dot);
+                return dot;
+            })
+            : [];
+
+        const showSlide = (index) => {
+            slides[active].classList.replace('opacity-100', 'opacity-0');
+            dots[active]?.classList.replace('bg-white', 'bg-white/50');
+            active = index;
+            slides[active].classList.replace('opacity-0', 'opacity-100');
+            dots[active]?.classList.replace('bg-white/50', 'bg-white');
+        };
+
+        this.carouselTimer = window.setInterval(() => {
+            showSlide((active + 1) % slides.length);
+        }, 4000);
     },
 
     async login() {
@@ -1061,29 +1157,6 @@ export const appState = {
         });
         document.querySelectorAll('[data-pathway-tab]').forEach(tab => {
             const active = tab.dataset.pathwayTab === panelId;
-            tab.classList.toggle('framework-tab-active', active);
-            tab.classList.toggle('framework-tab-idle', !active);
-        });
-    },
-
-    // Landing nav's "เกี่ยวกับระบบ" / "ช่วยเหลือ" links: open the About panel (it also
-    // holds the contact email) and scroll it into view, rather than pointing at pages
-    // that don't exist.
-    scrollToIntro() {
-        const details = document.getElementById('intro-details');
-        if (!details) return;
-        details.open = true;
-        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
-
-    // Landing page's collapsed "เกี่ยวกับระบบนี้" panel: one language block visible
-    // at a time instead of both full Thai and English copies stacked together.
-    showIntroLang(lang) {
-        document.querySelectorAll('[data-intro-lang]').forEach(panel => {
-            panel.classList.toggle('hidden', panel.dataset.introLang !== lang);
-        });
-        document.querySelectorAll('[data-intro-tab]').forEach(tab => {
-            const active = tab.dataset.introTab === lang;
             tab.classList.toggle('framework-tab-active', active);
             tab.classList.toggle('framework-tab-idle', !active);
         });
@@ -3076,7 +3149,12 @@ export const appState = {
         this.setText('r_updated_meta', formatUpdatedMeta(this.projectMeta));
 
         const team = (this.projectMeta?.project_members ?? [])
-            .map(member => member.member_email)
+            .map(member => {
+                const name = String(member.member_name ?? '').trim();
+                const email = String(member.member_email ?? '').trim();
+                if (!email) return '';
+                return name ? `${name} (${email})` : email;
+            })
             .filter(Boolean);
         this.setText(
             'r_team',
@@ -3405,6 +3483,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         appState.showView('view-app');
         document.getElementById('user-email-display').innerText = identity.email;
         document.getElementById('nav-user').classList.remove('hidden');
+        // Public marketing/info page -- not useful once already inside the app.
+        document.getElementById('about-nav-link')?.classList.add('hidden');
         initializeNewProject(identity, urlParams.get('fresh') !== '0');
 
         const requestedStep = Number(urlParams.get('step'));
@@ -3444,6 +3524,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         document.getElementById('user-email-display').innerText = identity.email;
         document.getElementById('nav-user').classList.remove('hidden');
+        // Public marketing/info page -- not useful once already inside the app.
+        document.getElementById('about-nav-link')?.classList.add('hidden');
 
         if (projectId) {
             await loadExistingProject(projectId, identity, resumeDraft);
@@ -3476,7 +3558,7 @@ async function loadExistingProject(id, identity, resumeDraft) {
     // is a normal outcome and must not surface as a thrown error.
     const { data: project, error } = await supabase
         .from('projects')
-        .select('*, project_members(user_id, member_email, added_at)')
+        .select('*, project_members(user_id, member_email, member_name, added_at)')
         .eq('id', id)
         .maybeSingle();
 
@@ -3552,6 +3634,7 @@ function initializeNewProject(identity, fresh) {
         appState.activityImages = [];
         appState.sroiRows = [appState.createSROIRow()];
         appState.isViewMode = false;
+        appState.pendingMembers = [];
 
         document.querySelectorAll('input, textarea').forEach(el => {
             // Checkbox/radio "value" is a fixed identifier (e.g. "SDG 2: ..."), not user
@@ -3644,6 +3727,33 @@ export async function saveProjectData(currentProjectData) {
             const newId = data[0].id;
             const newUrl = `${window.location.pathname}?id=${newId}`;
             window.history.replaceState({}, '', newUrl);
+
+            // Researchers queued via appState.pendingMembers while the project didn't
+            // exist yet -- invite them for real now that it does. Best-effort: a failed
+            // invite here does not undo the save, since the project itself already
+            // exists successfully; it's logged so it isn't silently lost.
+            if (appState.pendingMembers.length > 0) {
+                for (const { name, email } of appState.pendingMembers) {
+                    const { error: inviteError } = await supabase.rpc('add_project_researcher', {
+                        p_project_id: newId,
+                        p_email: email
+                    });
+                    if (inviteError) {
+                        console.error(`Could not invite queued researcher ${email}:`, inviteError);
+                        continue;
+                    }
+                    if (name) {
+                        const { error: nameError } = await supabase.rpc('set_project_researcher_name', {
+                            p_project_id: newId,
+                            p_email: email,
+                            p_name: name
+                        });
+                        if (nameError) console.error(`Could not save name for ${email}:`, nameError);
+                    }
+                }
+                appState.pendingMembers = [];
+            }
+
             return true;
         }
     }
