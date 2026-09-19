@@ -13,6 +13,8 @@ import { supabase } from './lib/supabaseClient.js';
 import { loadIdentity, signOut } from './lib/session.js';
 import { isAdmin } from './lib/permissions.js';
 import { escapeHTML, formatThaiDateTime, formatMoney } from './lib/format.js';
+import { downloadExcelBackup } from './lib/backupExcel.js';
+import { downloadSqlBackup } from './lib/backupSql.js';
 
 /** An admin list is unbounded -- never select the whole table at once. */
 const PAGE_SIZE = 50;
@@ -22,6 +24,8 @@ let allProjects = [];
 let offset = 0;
 let hasMore = true;
 let pendingDelete = null;
+/** Platform-wide total, independent of pagination -- null until fetchTotalCount() resolves. */
+let totalCount = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     identity = await loadIdentity();
@@ -38,9 +42,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('admin-search')?.addEventListener('input', renderTable);
     document.getElementById('admin-load-more')?.addEventListener('click', loadPage);
 
+    // isAdmin() is already true here (the check above redirects everyone else away),
+    // but the button stays hidden in the markup by default so it never flashes for
+    // a non-admin during the brief window before that redirect happens.
+    document.getElementById('backup-btn')?.classList.remove('hidden');
+
     bindDeleteModal();
+    bindBackupModal();
+    fetchTotalCount(); // independent of loadPage()'s pagination -- runs in parallel
     await loadPage();
 });
+
+/** head:true fetches only the count, not the rows -- separate from the paginated loadPage(). */
+async function fetchTotalCount() {
+    const { count, error } = await supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true });
+
+    if (error) {
+        console.error('Could not fetch total project count:', error);
+        return;
+    }
+
+    totalCount = count;
+    renderTable();
+}
 
 async function loadPage() {
     const { data, error } = await supabase
@@ -77,10 +103,8 @@ function renderTable() {
         : allProjects;
 
     if (count) {
-        // Says "loaded", not "total" -- pagination means this is not the whole table.
-        count.textContent = query
-            ? `แสดง ${rows.length} จาก ${allProjects.length} โครงการที่โหลดมา`
-            : `โหลดมาแล้ว ${allProjects.length} โครงการ${hasMore ? ' (ยังมีเพิ่ม)' : ''}`;
+        const total = totalCount ?? '...'; // fetchTotalCount() hasn't resolved yet
+        count.textContent = `แสดง ${rows.length} โครงการ -- จากทั้งหมด ${total} โครงการ`;
     }
 
     empty?.classList.toggle('hidden', rows.length > 0);
@@ -210,4 +234,68 @@ async function performDelete() {
     confirmBtn.innerHTML = originalLabel;
     document.getElementById('delete-modal').close();
     renderTable();
+}
+
+// --- Backup modal --------------------------------------------------------------
+
+function bindBackupModal() {
+    const modal = document.getElementById('backup-modal');
+    if (!modal) return;
+
+    document.getElementById('backup-btn')?.addEventListener('click', () => {
+        resetBackupModal();
+        modal.showModal();
+    });
+    document.getElementById('backup-cancel')?.addEventListener('click', () => modal.close());
+
+    document.getElementById('backup-admin-btn')?.addEventListener('click', () =>
+        runBackup(downloadExcelBackup, 'กำลังสร้างไฟล์ Excel... (Preparing Excel file...)'));
+
+    document.getElementById('backup-dev-btn')?.addEventListener('click', () =>
+        runBackup(downloadSqlBackup, 'กำลังสร้างไฟล์ SQL... (Preparing SQL file...)'));
+}
+
+function resetBackupModal() {
+    document.getElementById('backup-status')?.classList.add('hidden');
+    document.getElementById('backup-error')?.classList.add('hidden');
+    setBackupButtonsDisabled(false);
+}
+
+function setBackupButtonsDisabled(disabled) {
+    document.getElementById('backup-admin-btn').disabled = disabled;
+    document.getElementById('backup-dev-btn').disabled = disabled;
+    document.getElementById('backup-cancel').disabled = disabled;
+}
+
+/**
+ * Shared flow for both export buttons: disable, show a live status line (the Excel
+ * path may take a while past a few hundred projects), and surface any failure in the
+ * same Thai/English pattern as the delete flow above.
+ */
+async function runBackup(downloadFn, initialStatus) {
+    const statusEl = document.getElementById('backup-status');
+    const statusIcon = document.getElementById('backup-status-icon');
+    const statusText = document.getElementById('backup-status-text');
+    const errorEl = document.getElementById('backup-error');
+
+    errorEl.classList.add('hidden');
+    statusIcon.className = 'fa-solid fa-spinner fa-spin mr-1';
+    statusText.textContent = initialStatus;
+    statusEl.classList.remove('hidden');
+    setBackupButtonsDisabled(true);
+
+    try {
+        await downloadFn(message => { statusText.textContent = message; });
+        // Swap the spinner for a checkmark -- leaving fa-spin running after the text
+        // says "complete" reads as the export being stuck.
+        statusIcon.className = 'fa-solid fa-circle-check mr-1 text-green-600';
+        statusText.textContent = 'ดาวน์โหลดไฟล์สำเร็จ (Download complete.)';
+    } catch (error) {
+        console.error('Backup failed:', error);
+        statusEl.classList.add('hidden');
+        errorEl.textContent = error.message || 'สร้างไฟล์สำรองไม่สำเร็จ (Backup failed.)';
+        errorEl.classList.remove('hidden');
+    } finally {
+        setBackupButtonsDisabled(false);
+    }
 }

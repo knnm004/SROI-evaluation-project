@@ -15,7 +15,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
     "html2pdf.js": "^0.14.0",
-    "vite": "^8.1.4"
+    "vite": "^8.1.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "autoprefixer": "^10.5.2",
