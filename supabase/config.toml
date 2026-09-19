@@ -1,0 +1,13 @@
+# Minimal Supabase config for this project's Edge Functions.
+#
+# There is no `supabase/migrations/` in this checkout (see the note in
+# supabase/functions/admin-backup/index.ts) -- this file exists only to support
+# `supabase functions deploy admin-backup`, not a full local `supabase start` stack.
+
+project_id = "uytfqukshqewuhelromt"
+
+[functions.admin-backup]
+# The gateway checks the caller's JWT before the function even runs -- our client
+# already sends the signed-in user's real access token (see src/lib/backupSql.js),
+# and the function does its own admin-role check on top of that.
+verify_jwt = true
