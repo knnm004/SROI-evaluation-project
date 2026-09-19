@@ -48,18 +48,24 @@
         <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
             <div>
                 <h2 class="text-2xl font-bold text-gray-900">โครงการทั้งหมดในระบบ</h2>
-                <p class="text-sm text-gray-500 mt-1">
-                    All projects across every user. <span id="admin-count" data-testid="admin-count"></span>
-                </p>
+                <p class="text-sm text-gray-500 mt-1" id="admin-count" data-testid="admin-count"></p>
             </div>
-            <div class="w-full md:w-80">
-                <label for="admin-search" class="sr-only">ค้นหา</label>
-                <div class="relative">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-                    <input type="text" id="admin-search" data-testid="admin-search-input" autocomplete="off"
-                           placeholder="ค้นหาชื่อโครงการ หรือเจ้าของ"
-                           class="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none text-sm">
+            <div class="flex items-center gap-3 w-full md:w-auto">
+                <div class="w-full md:w-80">
+                    <label for="admin-search" class="sr-only">ค้นหา</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input type="text" id="admin-search" data-testid="admin-search-input" autocomplete="off"
+                               placeholder="ค้นหาชื่อโครงการ หรือเจ้าของ"
+                               class="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none text-sm">
+                    </div>
                 </div>
+                <!-- Hidden until admin.js confirms isAdmin(identity), same gating pattern as #admin-email. -->
+                <button id="backup-btn" data-testid="admin-backup-btn" type="button" class="hidden shrink-0
+                        bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-2 px-4
+                        rounded-lg shadow-sm transition-colors text-sm whitespace-nowrap">
+                    <i class="fa-solid fa-database mr-1"></i>สำรองข้อมูล (Backup)
+                </button>
             </div>
         </div>
 
@@ -128,6 +134,55 @@
                 <button type="button" id="delete-confirm-btn" disabled data-testid="admin-delete-confirm-btn"
                         class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
                     ลบถาวร
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Backup: two independent export paths. "For Admin" runs entirely client-side
+         (Excel); "For Dev" calls a server-side Edge Function (SQL) because that path
+         needs a direct-Postgres credential that must never reach the browser. -->
+    <dialog id="backup-modal" data-testid="admin-backup-modal"
+            class="rounded-2xl p-0 w-full max-w-lg backdrop:bg-black/40">
+        <div class="p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-1">
+                <i class="fa-solid fa-database text-chula-darker mr-2"></i>สำรองข้อมูล (Backup)
+            </h3>
+            <p class="text-sm text-gray-600 mb-5">เลือกรูปแบบไฟล์สำรองข้อมูล</p>
+
+            <div class="grid sm:grid-cols-2 gap-3">
+                <button type="button" id="backup-admin-btn" data-testid="admin-backup-admin-btn"
+                        class="text-left border border-gray-200 rounded-xl p-4 hover:border-chula hover:bg-chula/5
+                               transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <div class="font-semibold text-gray-900 mb-1">
+                        <i class="fa-solid fa-file-excel text-green-600 mr-1"></i>For Admin
+                    </div>
+                    <p class="text-xs text-gray-500">
+                        ไฟล์ Excel สำหรับดูข้อมูลทั้งหมด (Excel file for browsing all project data).
+                    </p>
+                </button>
+                <button type="button" id="backup-dev-btn" data-testid="admin-backup-dev-btn"
+                        class="text-left border border-gray-200 rounded-xl p-4 hover:border-chula hover:bg-chula/5
+                               transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <div class="font-semibold text-gray-900 mb-1">
+                        <i class="fa-solid fa-database text-gray-600 mr-1"></i>For Dev
+                    </div>
+                    <p class="text-xs text-gray-500">
+                        ไฟล์ SQL สำหรับกู้คืนฐานข้อมูล (SQL dump for restoring the database).
+                    </p>
+                </button>
+            </div>
+
+            <p id="backup-status" data-testid="admin-backup-status" class="hidden text-sm text-gray-600 mt-4">
+                <i id="backup-status-icon" class="fa-solid fa-spinner fa-spin mr-1"></i><span id="backup-status-text"></span>
+            </p>
+            <p id="backup-error" role="alert" data-testid="admin-backup-error"
+               class="hidden text-sm text-red-600 mt-4"></p>
+
+            <div class="mt-5 flex justify-end">
+                <button type="button" id="backup-cancel" data-testid="admin-backup-cancel"
+                        class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium">
+                    ปิด
                 </button>
             </div>
         </div>

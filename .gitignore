@@ -2,3 +2,8 @@ node_modules
 dist
 .env
 supabase/*
+# Exceptions: the admin-backup Edge Function and its deploy config are source code,
+# not generated/local Supabase state -- track them like any other app code.
+!supabase/functions/
+!supabase/functions/**
+!supabase/config.toml
