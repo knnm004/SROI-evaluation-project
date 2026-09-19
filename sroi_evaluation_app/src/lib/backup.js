@@ -41,19 +41,33 @@ export function isImageData(value) {
  * Arrays of objects (e.g. sroiRows, activityImages) are pulled out into `arrayTables`
  * instead of flattened into the main row, keyed by the dot-path they were found at --
  * the caller puts each on its own sheet, cross-referenced by project id.
- * Anything that looks like base64 image data becomes a "Yes"/"No" flag.
  *
- * @returns {{fields: Record<string, string|number>, arrayTables: Record<string, object[]>}}
+ * Anything that looks like base64 image data becomes a "Yes"/"No" flag in `fields` /
+ * `arrayTables` (a spreadsheet cell is never a sane place for it), but the raw data is
+ * ALSO kept in `images` / `arrayImages` -- keyed by the exact column name the flag
+ * landed under -- so a caller that wants to actually embed the photo (see
+ * backupExcel.js) still has it, without every caller having to deal with raw base64.
+ *
+ * @returns {{
+ *   fields: Record<string, string|number>,
+ *   arrayTables: Record<string, object[]>,
+ *   images: Record<string, string>,
+ *   arrayImages: Record<string, Array<string|null>>
+ * }}
  */
 export function flattenAssessmentData(data) {
     const fields = {};
     const arrayTables = {};
+    const images = {};
+    const arrayImages = {};
 
     function flattenArrayItem(item) {
-        if (!item || typeof item !== 'object') return { value: item ?? '' };
+        if (!item || typeof item !== 'object') return { row: { value: item ?? '' }, image: null };
         const row = {};
+        let image = null;
         Object.entries(item).forEach(([key, nested]) => {
             if (key === 'src' || isImageData(nested)) {
+                if (isImageData(nested)) image = nested;
                 row[key === 'src' ? 'Photo attached' : key] = nested ? 'Yes' : 'No';
             } else if (Array.isArray(nested)) {
                 row[key] = nested.join(', ');
@@ -63,13 +77,14 @@ export function flattenAssessmentData(data) {
                 row[key] = nested ?? '';
             }
         });
-        return row;
+        return { row, image };
     }
 
     function walk(value, path) {
         // uploadedImage is either a base64 data URI or null -- never a real column value.
         if (path === 'uploadedImage') {
             fields['Photo attached'] = value ? 'Yes' : 'No';
+            if (isImageData(value)) images['Photo attached'] = value;
             return;
         }
         // sroiCalculations is a derived cache of sroiRows (see assessmentSnapshot.js);
@@ -86,12 +101,15 @@ export function flattenAssessmentData(data) {
         }
         if (isImageData(value)) {
             fields[path] = 'Yes';
+            images[path] = value;
             return;
         }
         if (Array.isArray(value)) {
             const hasObjects = value.some(item => item && typeof item === 'object' && !Array.isArray(item));
             if (hasObjects) {
-                arrayTables[path] = value.map(flattenArrayItem);
+                const built = value.map(flattenArrayItem);
+                arrayTables[path] = built.map(entry => entry.row);
+                arrayImages[path] = built.map(entry => entry.image);
             } else {
                 fields[path] = value.join(', ');
             }
@@ -106,5 +124,5 @@ export function flattenAssessmentData(data) {
 
     Object.entries(data ?? {}).forEach(([key, value]) => walk(value, key));
 
-    return { fields, arrayTables };
+    return { fields, arrayTables, images, arrayImages };
 }
