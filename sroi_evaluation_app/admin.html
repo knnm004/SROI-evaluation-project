@@ -8,7 +8,7 @@
     <!-- Match fonts and icons from index.html -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?ffamily=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col font-sans">
@@ -43,6 +43,30 @@
         </div>
     </header>
 
+    <!-- Critical (>=90%) database usage banner. Edge-to-edge, outside <main>'s width
+         cap, so it's the first thing seen on landing -- distinct from the quieter
+         80-89% note next to the usage ring below. Hidden by default; admin.js shows
+         it only past the critical threshold, and only for isAdmin() (same gating as
+         #backup-btn / #db-usage-card). Closeable per page-load, but reappears on the
+         next visit as long as usage is still critical -- it should not go away for
+         good just because it was dismissed once. -->
+    <div id="db-usage-banner" data-testid="admin-db-usage-banner" class="hidden bg-red-600 text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center gap-3 text-sm">
+            <i class="fa-solid fa-triangle-exclamation shrink-0"></i>
+            <span class="flex-1">
+                พื้นที่ฐานข้อมูลใกล้เต็ม กรุณาสำรองข้อมูลและแจ้งทีมงานเพื่อโอนย้ายข้อมูล
+            </span>
+            <button type="button" id="db-usage-banner-backup-btn" data-testid="admin-db-usage-banner-backup-btn"
+                    class="shrink-0 bg-white text-red-700 font-semibold text-xs px-3 py-1.5 rounded-md hover:bg-red-50 whitespace-nowrap">
+                สำรองข้อมูลตอนนี้ (Back up now)
+            </button>
+            <button type="button" id="db-usage-banner-close" data-testid="admin-db-usage-banner-close"
+                    aria-label="ปิด" class="shrink-0 text-white/80 hover:text-white text-lg leading-none px-1">
+                &times;
+            </button>
+        </div>
+    </div>
+
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
@@ -67,6 +91,32 @@
                     <i class="fa-solid fa-database mr-1"></i>สำรองข้อมูล (Backup)
                 </button>
             </div>
+        </div>
+
+        <!-- Hidden until admin.js confirms isAdmin(identity), same gating pattern as #backup-btn.
+             Deliberately a thin strip, not a card -- this is a secondary status readout,
+             the project list below is the actual point of the page. -->
+        <div id="db-usage-card" data-testid="admin-db-usage-card"
+             class="hidden flex items-center flex-wrap gap-x-3 gap-y-1 bg-white border border-gray-200 rounded-lg px-4 py-2 mb-4 text-sm">
+            <div class="relative w-9 h-9 shrink-0">
+                <svg viewBox="0 0 100 100" class="w-9 h-9 -rotate-90">
+                    <circle cx="50" cy="50" r="42" fill="none" stroke="#e5e7eb" stroke-width="16"></circle>
+                    <circle id="db-usage-ring" cx="50" cy="50" r="42" fill="none" stroke="#DA5F8E" stroke-width="16"
+                            stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"
+                            style="transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease;"></circle>
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <span id="db-usage-percent" data-testid="admin-db-usage-percent" class="text-[10px] font-bold text-gray-700">--</span>
+                </div>
+            </div>
+            <span class="text-gray-500 shrink-0">พื้นที่ฐานข้อมูล (Database usage):</span>
+            <span id="db-usage-text" data-testid="admin-db-usage-text" class="text-gray-700">กำลังตรวจสอบ... (Checking...)</span>
+            <span id="db-usage-note" class="hidden text-amber-700">
+                <i class="fa-solid fa-triangle-exclamation mr-1"></i><span id="db-usage-note-text"></span>
+                <button type="button" id="db-usage-backup-link" data-testid="admin-db-usage-backup-link"
+                        class="underline font-medium ml-1">สำรองข้อมูลตอนนี้ (Back up now)</button>
+            </span>
+            <span id="db-usage-error" data-testid="admin-db-usage-error" class="hidden text-red-600"></span>
         </div>
 
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
