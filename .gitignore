@@ -7,3 +7,5 @@ supabase/*
 !supabase/functions/
 !supabase/functions/**
 !supabase/config.toml
+!supabase/migrations/
+!supabase/migrations/**
