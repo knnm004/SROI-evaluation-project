@@ -15,6 +15,7 @@ import { isAdmin } from './lib/permissions.js';
 import { escapeHTML, formatThaiDateTime, formatMoney } from './lib/format.js';
 import { downloadExcelBackup } from './lib/backupExcel.js';
 import { downloadSqlBackup } from './lib/backupSql.js';
+import { fetchDatabaseUsageBytes, DATABASE_QUOTA_BYTES, formatBytes } from './lib/dbUsage.js';
 
 /** An admin list is unbounded -- never select the whole table at once. */
 const PAGE_SIZE = 50;
@@ -46,10 +47,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // but the button stays hidden in the markup by default so it never flashes for
     // a non-admin during the brief window before that redirect happens.
     document.getElementById('backup-btn')?.classList.remove('hidden');
+    document.getElementById('db-usage-card')?.classList.remove('hidden');
 
     bindDeleteModal();
     bindBackupModal();
+    bindDbUsageBackupLink();
+    bindDbUsageBanner();
     fetchTotalCount(); // independent of loadPage()'s pagination -- runs in parallel
+    fetchAndRenderDbUsage();
     await loadPage();
 });
 
@@ -66,6 +71,102 @@ async function fetchTotalCount() {
 
     totalCount = count;
     renderTable();
+}
+
+// --- Database usage donut -----------------------------------------------------
+
+/** Full circumference of the ring's <circle r="42">, i.e. 2 * PI * 42. */
+const DB_USAGE_RING_CIRCUMFERENCE = 263.9;
+/** 80-89%: quiet inline nudge next to the ring. 90%+: the unmissable banner instead. */
+const DB_USAGE_WARNING_THRESHOLD = 80;
+const DB_USAGE_CRITICAL_THRESHOLD = 90;
+
+/**
+ * Closed for this page load only, not persisted -- the point of the banner is that it
+ * comes back on the next visit for as long as usage is still critical, rather than
+ * being dismissable for good the way a localStorage flag would make it.
+ */
+let dbUsageBannerDismissed = false;
+
+function bindDbUsageBackupLink() {
+    document.getElementById('db-usage-backup-link')?.addEventListener('click', openBackupModalFromUsageWarning);
+}
+
+function bindDbUsageBanner() {
+    document.getElementById('db-usage-banner-backup-btn')?.addEventListener('click', openBackupModalFromUsageWarning);
+    document.getElementById('db-usage-banner-close')?.addEventListener('click', () => {
+        dbUsageBannerDismissed = true;
+        document.getElementById('db-usage-banner')?.classList.add('hidden');
+    });
+}
+
+function openBackupModalFromUsageWarning() {
+    resetBackupModal();
+    document.getElementById('backup-modal')?.showModal();
+}
+
+async function fetchAndRenderDbUsage() {
+    const textEl = document.getElementById('db-usage-text');
+    const errorEl = document.getElementById('db-usage-error');
+
+    try {
+        const usedBytes = await fetchDatabaseUsageBytes();
+        renderDbUsage(usedBytes);
+    } catch (error) {
+        console.error('Could not fetch database usage:', error);
+        if (textEl) textEl.classList.add('hidden');
+        if (errorEl) {
+            // PGRST202/PGRST302: PostgREST couldn't find the RPC function -- almost
+            // always means supabase/migrations/0008_db_usage_rpc.sql was never
+            // applied yet, which is worth saying outright rather than a generic
+            // failure message that sends whoever sees this straight to devtools.
+            errorEl.textContent = (error.code === 'PGRST202' || error.code === 'PGRST302')
+                ? 'ยังไม่ได้ตั้งค่าฟังก์ชันในฐานข้อมูล กรุณารัน supabase/migrations/0008_db_usage_rpc.sql ' +
+                  '(Database function not set up yet -- run supabase/migrations/0008_db_usage_rpc.sql in the Supabase SQL Editor.)'
+                : 'ไม่สามารถตรวจสอบพื้นที่ฐานข้อมูลได้ (Could not check database usage.)';
+            errorEl.classList.remove('hidden');
+        }
+    }
+}
+
+function renderDbUsage(usedBytes) {
+    const percent = Math.min(100, Math.max(0, (usedBytes / DATABASE_QUOTA_BYTES) * 100));
+
+    const ring = document.getElementById('db-usage-ring');
+    const percentEl = document.getElementById('db-usage-percent');
+    const textEl = document.getElementById('db-usage-text');
+    const noteEl = document.getElementById('db-usage-note');
+    const noteTextEl = document.getElementById('db-usage-note-text');
+
+    if (ring) {
+        ring.style.strokeDashoffset = String(DB_USAGE_RING_CIRCUMFERENCE * (1 - percent / 100));
+        // Same thresholds as the warnings below -- green is fine, amber is "keep an
+        // eye on it", red matches the critical banner turning up.
+        ring.style.stroke = percent >= DB_USAGE_CRITICAL_THRESHOLD ? '#dc2626'
+            : percent >= DB_USAGE_WARNING_THRESHOLD ? '#d97706' : '#DA5F8E';
+    }
+    if (percentEl) percentEl.textContent = `${Math.round(percent)}%`;
+    if (textEl) textEl.textContent = `ใช้ไปแล้ว ${formatBytes(usedBytes)} / ${formatBytes(DATABASE_QUOTA_BYTES)}`;
+
+    // 80-89%: the quiet inline nudge here. 90%+: escalates to the banner instead
+    // (see renderDbUsageBanner) rather than showing both at once.
+    if (noteEl) {
+        const shouldWarn = percent >= DB_USAGE_WARNING_THRESHOLD && percent < DB_USAGE_CRITICAL_THRESHOLD;
+        noteEl.classList.toggle('hidden', !shouldWarn);
+        if (shouldWarn && noteTextEl) {
+            noteTextEl.textContent = 'พื้นที่ฐานข้อมูลใกล้เต็ม แนะนำให้สำรองข้อมูล (Getting full -- consider backing up.)';
+        }
+    }
+
+    renderDbUsageBanner(percent);
+}
+
+function renderDbUsageBanner(percent) {
+    const banner = document.getElementById('db-usage-banner');
+    if (!banner) return;
+
+    const shouldShow = percent >= DB_USAGE_CRITICAL_THRESHOLD && !dbUsageBannerDismissed;
+    banner.classList.toggle('hidden', !shouldShow);
 }
 
 async function loadPage() {
