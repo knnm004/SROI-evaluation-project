@@ -88,6 +88,8 @@ export function deserialiseAssessment(snapshot, state) {
     });
     state.syncObjectivesFromHidden?.();
     state.updateKeyTakeawayCounter?.();
+    state.updateProjectCategoryDescription?.();
+    state.validateSupportYear?.();
 
     const selected = new Set(snapshot.selectedSDGs ?? []);
     document.querySelectorAll('.sdg-checkbox').forEach(cb => {
