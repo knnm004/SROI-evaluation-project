@@ -256,6 +256,41 @@ const SDG_TARGETS = {
     ]
 };
 
+/**
+ * Loose bounds for "ปีที่ได้รับการสนับสนุนโครงการ" (year project received support),
+ * in Buddhist Era (พ.ศ.) -- wide enough to cover any real project without being so
+ * wide it stops catching the actual mistake this guards against: someone typing the
+ * Gregorian (ค.ศ.) year instead.
+ */
+const MIN_SUPPORT_YEAR_BE = 2400;
+const MAX_SUPPORT_YEAR_BE = 2700;
+
+/**
+ * Project categories for the "หมวดหมู่โครงการ" dropdown on step 1 -- the main
+ * category is the dropdown option; `focus` is the IRIS+-style sub-category list,
+ * shown as a read-only hint under the dropdown rather than as separate options
+ * (per request: only the main category is selectable).
+ */
+const PROJECT_CATEGORIES = [
+    { title: "เกษตรกรรม", focus: "เกษตรกรรมรายย่อย, เกษตรกรรมยั่งยืน" },
+    { title: "คุณภาพอากาศ", focus: "อากาศสะอาด" },
+    { title: "ความหลากหลายทางชีวภาพและระบบนิเวศ", focus: "การอนุรักษ์ความหลากหลายทางชีวภาพและระบบนิเวศ" },
+    { title: "การเปลี่ยนแปลงสภาพภูมิอากาศ", focus: "การลดผลกระทบจากการเปลี่ยนแปลงสภาพภูมิอากาศ, การปรับตัวและความยืดหยุ่นต่อสภาพภูมิอากาศ" },
+    { title: "ความหลากหลายและการยอมรับความแตกต่าง", focus: "มิติทางเพศ, ความเท่าเทียมทางเชื้อชาติ" },
+    { title: "การศึกษา", focus: "การเข้าถึงการศึกษาที่มีคุณภาพ" },
+    { title: "การจ้างงาน", focus: "งานที่มีคุณภาพ" },
+    { title: "พลังงาน", focus: "พลังงานสะอาด, การเข้าถึงพลังงาน, ประสิทธิภาพพลังงาน" },
+    { title: "บริการทางการเงิน", focus: "การเข้าถึงบริการทางการเงิน" },
+    { title: "สุขภาพ", focus: "การเข้าถึงบริการสุขภาพที่มีคุณภาพ" },
+    { title: "โครงสร้างพื้นฐาน", focus: "โครงสร้างพื้นฐานที่ยืดหยุ่นต่อการเปลี่ยนแปลง" },
+    { title: "ทรัพยากรผืนดินและป่าไม้", focus: "การอนุรักษ์ทรัพยากรธรรมชาติ, การจัดการที่ดินอย่างยั่งยืน, การป่าไม้อย่างยั่งยืน" },
+    { title: "ทะเลและเขตชายฝั่ง", focus: "การอนุรักษ์และจัดการทรัพยากรทางทะเล" },
+    { title: "มลพิษ", focus: "การป้องกันมลพิษ" },
+    { title: "ที่อยู่อาศัย", focus: "ที่อยู่อาศัยคุณภาพในราคาที่เข้าถึงได้, อาคารสีเขียว" },
+    { title: "ขยะและของเสีย", focus: "การจัดการของเสีย" },
+    { title: "ทรัพยากรน้ำ", focus: "การจัดการน้ำอย่างยั่งยืน, น้ำ สุขาภิบาล และสุขอนามัย" }
+];
+
 export const appState = {
     currentView: 'view-landing',
     currentStep: 1,
@@ -601,6 +636,7 @@ export const appState = {
         this.renderObjectiveInputs();
         this.renderActivityPhotoSlots();
         this.renderSDGs();
+        this.renderProjectCategoryOptions(); // must run before loadDraft() restores a value onto it
         this.renderStepper();
         this.renderSROIRows();
         this.attachAutoSaveListeners();
@@ -791,6 +827,75 @@ export const appState = {
             `;
         });
         container.innerHTML = html;
+    },
+
+    renderProjectCategoryOptions() {
+        const select = document.getElementById('m_project_category');
+        if (!select) return;
+
+        const options = PROJECT_CATEGORIES
+            .map(category => `<option value="${this.escapeHTML(category.title)}">${this.escapeHTML(category.title)}</option>`)
+            .join('');
+        select.innerHTML = `<option value="">-- เลือกหมวดหมู่ --</option>${options}`;
+    },
+
+    /** Shows the selected category's sub-category list as a read-only hint -- it is
+     * not itself a stored field, so this needs re-running after a snapshot restore
+     * (see assessmentSnapshot.js) the same way syncObjectivesFromHidden() does. */
+    updateProjectCategoryDescription() {
+        const desc = document.getElementById('m_project_category_desc');
+        if (!desc) return;
+
+        const selected = this.getValue('m_project_category');
+        const category = PROJECT_CATEGORIES.find(item => item.title === selected);
+        desc.textContent = category ? category.focus : '';
+    },
+
+    /** Keeps ปีที่ได้รับการสนับสนุนโครงการ numeric as the admin types -- it's type="text"
+     * (not "number"), specifically so there's no up/down spinner implying this is a
+     * quantity to increment rather than a year to type. */
+    sanitizeSupportYearInput() {
+        const input = document.getElementById('m_support_year');
+        if (!input) return;
+        const digitsOnly = input.value.replace(/\D/g, '').slice(0, 4);
+        if (digitsOnly !== input.value) input.value = digitsOnly;
+    },
+
+    /**
+     * Catches the most likely mistake with this field: typing the Gregorian (ค.ศ.)
+     * year instead of Buddhist Era (พ.ศ.), which this app uses everywhere else (see
+     * format.js's th-TH locale dates). A bare out-of-range check wouldn't tell the two
+     * apart from, say, a typo -- explicitly recognizing the 1900-2100 Gregorian band
+     * is what lets the message say exactly what's wrong and what to type instead.
+     *
+     * Advisory only -- this does not block saving, the same as other soft validations
+     * in this step (e.g. updateKeyTakeawayCounter's word-count warning).
+     */
+    validateSupportYear() {
+        const input = document.getElementById('m_support_year');
+        const error = document.getElementById('m_support_year_error');
+        if (!input || !error) return;
+
+        const raw = input.value.trim();
+        if (!raw) {
+            error.classList.add('hidden');
+            input.classList.remove('border-red-300');
+            return;
+        }
+
+        const year = Number(raw);
+        const looksGregorian = raw.length === 4 && year >= 1900 && year <= 2100;
+        const outOfRange = raw.length !== 4 || year < MIN_SUPPORT_YEAR_BE || year > MAX_SUPPORT_YEAR_BE;
+
+        const message = looksGregorian
+            ? `ดูเหมือนเป็นปี ค.ศ. กรุณากรอกเป็นปี พ.ศ. (เช่น ${year} ค.ศ. คือ ${year + 543} พ.ศ.)`
+            : outOfRange
+                ? 'กรุณากรอกปี พ.ศ. 4 หลักที่ถูกต้อง (เช่น 2568)'
+                : '';
+
+        error.textContent = message;
+        error.classList.toggle('hidden', !message);
+        input.classList.toggle('border-red-300', !!message);
     },
 
     parseObjectiveText(value) {
