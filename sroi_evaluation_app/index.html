@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
+<body class="landing-bg bg-gray-50 text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
 
     <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -121,27 +121,41 @@
               whatever's in the middle of each photo. Mobile has no spare width for a
               side-by-side split, so it stacks: a shorter, edge-to-edge banner on top,
               text below, no fade strip.
-              appState.initLandingCarousel() (called from showView()) drives the
-              crossfade + dots; pure CSS opacity transition, no library.
+              The left column is a vertical auto-scrolling gallery, driven by
+              appState.initLandingGallery() (called from showView()); pure CSS animation,
+              no library.
             -->
             <div class="lg:flex lg:items-stretch lg:min-h-[70vh] lg:gap-10">
-                <div class="relative w-full h-56 sm:h-72 lg:h-auto lg:w-1/2 lg:flex-shrink-0 overflow-hidden rounded-2xl shadow-sm mb-6 lg:mb-0"
+                <div class="relative w-full h-72 sm:h-80 lg:h-auto lg:w-1/2 lg:flex-shrink-0 overflow-hidden rounded-2xl shadow-sm mb-6 lg:mb-0"
                      id="landing-carousel" data-testid="landing-carousel">
-                    <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-carousel-slide
-                         class="absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-700 opacity-100">
-                    <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-carousel-slide
-                         class="absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-700 opacity-0">
-                    <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-carousel-slide
-                         class="absolute inset-0 w-full h-full object-contain bg-white p-4 transition-opacity duration-700 opacity-0">
+                    <!--
+                      Vertical auto-scrolling gallery. To add a picture, add another <img
+                      data-gallery-item ...> to the track below -- that is the only edit
+                      needed. appState.initLandingGallery() clones the whole set once so the
+                      loop is seamless (the track scrolls exactly one set's height, then
+                      restarts), and sizes the scroll speed from how many pictures there are.
+                      Pauses on hover; stands still for prefers-reduced-motion.
+                      The picture list below is placeholder duplication until more photos
+                      are supplied.
+                    -->
+                    <div class="absolute inset-0 landing-gallery-viewport">
+                        <div id="landing-gallery-track" class="landing-gallery-track">
+                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
+                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
+                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item class="landing-gallery-item object-contain bg-white p-4">
+                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
+                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
+                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item class="landing-gallery-item object-contain bg-white p-4">
+                        </div>
+                    </div>
                     <div class="hidden lg:block absolute inset-y-0 right-0 w-[28%] pointer-events-none"
-                         style="background: linear-gradient(to right, transparent, #f9fafb); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); -webkit-mask-image: linear-gradient(to right, transparent, black); mask-image: linear-gradient(to right, transparent, black);"
+                         style="background: linear-gradient(to right, transparent, #fdf7fa); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); -webkit-mask-image: linear-gradient(to right, transparent, black); mask-image: linear-gradient(to right, transparent, black);"
                          aria-hidden="true"></div>
-                    <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-10" id="landing-carousel-dots"></div>
                 </div>
 
                 <div class="lg:w-1/2 flex flex-col justify-center text-center lg:text-left">
-                    <h2 class="text-2xl md:text-4xl font-bold text-gray-900 mb-1">ระบบประเมินผลตอบแทนทางสังคม</h2>
-                    <p class="text-lg md:text-xl font-semibold text-chula mb-3">Chula Triple S System</p>
+                    <p class="text-lg md:text-xl font-semibold text-chula mb-1">Chula Triple S System</p>
+                    <h2 class="text-2xl md:text-4xl font-bold text-gray-900 mb-3">ระบบประเมินผลตอบแทนทางสังคม</h2>
                     <p class="text-base md:text-lg text-gray-600 mb-4 leading-relaxed max-w-2xl mx-auto lg:mx-0">
                         ระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย
 
@@ -162,6 +176,61 @@
                     </p>
                 </div>
             </div>
+
+            <!--
+              Project overview. Hidden until appState.initLandingStats() has real numbers
+              (it stays hidden if the stats function isn't set up, rather than showing a
+              broken panel to visitors). Everything inside is filled by
+              src/lib/landingStats.js from get_public_project_stats(), which returns
+              counts only -- see supabase/migrations/0009_public_project_stats.sql.
+            -->
+            <section id="landing-stats" data-testid="landing-stats"
+                     class="landing-stats hidden relative mt-16 lg:mt-24 overflow-hidden px-5 py-8 sm:px-10 sm:py-12"
+                     aria-labelledby="landing-stats-heading">
+                <div class="stats-blob stats-blob-a" aria-hidden="true"></div>
+                <div class="stats-blob stats-blob-b" aria-hidden="true"></div>
+
+                <div class="relative z-10">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                        <p id="landing-stats-heading" class="stats-eyebrow">
+                            <span class="stats-eyebrow-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                            Impact overview &middot; ภาพรวมโครงการในระบบ
+                        </p>
+                        <button type="button" id="landing-stats-reset" data-testid="landing-stats-reset"
+                                class="hidden stats-reset">
+                            <i class="fa-solid fa-rotate-left mr-1"></i>ล้างตัวกรอง
+                        </button>
+                    </div>
+
+                    <p id="landing-stats-sentence" data-testid="landing-stats-sentence" class="stats-sentence" aria-live="polite"></p>
+
+                    <div class="stats-rail-head">
+                        <h4>หมวดหมู่โครงการ</h4>
+                        <span>เลื่อนดู คลิกเพื่อกรอง</span>
+                    </div>
+                    <div class="stats-rail-wrap">
+                        <div id="landing-stats-categories" data-testid="landing-stats-categories" class="stats-rail"></div>
+                    </div>
+
+                    <div class="stats-rail-head mt-2">
+                        <h4>เป้าหมายการพัฒนาที่ยั่งยืน (SDGs)</h4>
+                        <span>คลิกเพื่อกรองตามเป้าหมาย</span>
+                    </div>
+                    <div class="stats-rail-wrap">
+                        <div id="landing-stats-sdgs" data-testid="landing-stats-sdgs" class="stats-rail"></div>
+                    </div>
+
+                    <div class="stats-footer">
+                        <p class="stats-sentence-sm">
+                            โครงการเหล่านี้เชื่อมโยงกับเป้าหมายการพัฒนาที่ยั่งยืน (SDGs) แล้ว
+                            <span class="stats-inline-pill stats-inline-pill-solid"><span id="landing-stats-linked">0</span> เป้าหมาย</span>
+                            จากทั้งหมด 17 เป้าหมายระดับสากล
+                        </p>
+                        <div id="landing-stats-dots" data-testid="landing-stats-dots" class="stats-dots" role="group" aria-label="เป้าหมาย SDGs 17 ข้อ"></div>
+                    </div>
+                    <p id="landing-stats-note" class="stats-note"></p>
+                </div>
+            </section>
         </div>
         <div id="view-login" class="hidden w-full max-w-md fade-in bg-white rounded-2xl shadow-xl overflow-hidden">
             <!--<div class="bg-chula p-6 text-center text-white">

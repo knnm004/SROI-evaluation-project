@@ -16,6 +16,7 @@ import {
     buildProjectPayload,
     isSROIRowStarted
 } from './lib/assessmentSnapshot.js';
+import { initLandingStats } from './lib/landingStats.js';
 
 // Helper to scope draft keys per project ID so projects don't bleed into each other
 function getDraftKey() {
@@ -270,25 +271,27 @@ const MAX_SUPPORT_YEAR_BE = 2700;
  * category is the dropdown option; `focus` is the IRIS+-style sub-category list,
  * shown as a read-only hint under the dropdown rather than as separate options
  * (per request: only the main category is selectable).
+ * `icon` (a Font Awesome class) and `tone` (a hex colour) are used only by the landing
+ * page's project-overview cards (src/lib/landingStats.js).
  */
 const PROJECT_CATEGORIES = [
-    { title: "เกษตรกรรม", focus: "เกษตรกรรมรายย่อย, เกษตรกรรมยั่งยืน" },
-    { title: "คุณภาพอากาศ", focus: "อากาศสะอาด" },
-    { title: "ความหลากหลายทางชีวภาพและระบบนิเวศ", focus: "การอนุรักษ์ความหลากหลายทางชีวภาพและระบบนิเวศ" },
-    { title: "การเปลี่ยนแปลงสภาพภูมิอากาศ", focus: "การลดผลกระทบจากการเปลี่ยนแปลงสภาพภูมิอากาศ, การปรับตัวและความยืดหยุ่นต่อสภาพภูมิอากาศ" },
-    { title: "ความหลากหลายและการยอมรับความแตกต่าง", focus: "มิติทางเพศ, ความเท่าเทียมทางเชื้อชาติ" },
-    { title: "การศึกษา", focus: "การเข้าถึงการศึกษาที่มีคุณภาพ" },
-    { title: "การจ้างงาน", focus: "งานที่มีคุณภาพ" },
-    { title: "พลังงาน", focus: "พลังงานสะอาด, การเข้าถึงพลังงาน, ประสิทธิภาพพลังงาน" },
-    { title: "บริการทางการเงิน", focus: "การเข้าถึงบริการทางการเงิน" },
-    { title: "สุขภาพ", focus: "การเข้าถึงบริการสุขภาพที่มีคุณภาพ" },
-    { title: "โครงสร้างพื้นฐาน", focus: "โครงสร้างพื้นฐานที่ยืดหยุ่นต่อการเปลี่ยนแปลง" },
-    { title: "ทรัพยากรผืนดินและป่าไม้", focus: "การอนุรักษ์ทรัพยากรธรรมชาติ, การจัดการที่ดินอย่างยั่งยืน, การป่าไม้อย่างยั่งยืน" },
-    { title: "ทะเลและเขตชายฝั่ง", focus: "การอนุรักษ์และจัดการทรัพยากรทางทะเล" },
-    { title: "มลพิษ", focus: "การป้องกันมลพิษ" },
-    { title: "ที่อยู่อาศัย", focus: "ที่อยู่อาศัยคุณภาพในราคาที่เข้าถึงได้, อาคารสีเขียว" },
-    { title: "ขยะและของเสีย", focus: "การจัดการของเสีย" },
-    { title: "ทรัพยากรน้ำ", focus: "การจัดการน้ำอย่างยั่งยืน, น้ำ สุขาภิบาล และสุขอนามัย" }
+    { title: "เกษตรกรรม", icon: "fa-wheat-awn", tone: "#d97706", focus: "เกษตรกรรมรายย่อย, เกษตรกรรมยั่งยืน" },
+    { title: "คุณภาพอากาศ", icon: "fa-wind", tone: "#0ea5e9", focus: "อากาศสะอาด" },
+    { title: "ความหลากหลายทางชีวภาพและระบบนิเวศ", icon: "fa-seedling", tone: "#16a34a", focus: "การอนุรักษ์ความหลากหลายทางชีวภาพและระบบนิเวศ" },
+    { title: "การเปลี่ยนแปลงสภาพภูมิอากาศ", icon: "fa-temperature-high", tone: "#ea580c", focus: "การลดผลกระทบจากการเปลี่ยนแปลงสภาพภูมิอากาศ, การปรับตัวและความยืดหยุ่นต่อสภาพภูมิอากาศ" },
+    { title: "ความหลากหลายและการยอมรับความแตกต่าง", icon: "fa-people-group", tone: "#7c3aed", focus: "มิติทางเพศ, ความเท่าเทียมทางเชื้อชาติ" },
+    { title: "การศึกษา", icon: "fa-graduation-cap", tone: "#4f46e5", focus: "การเข้าถึงการศึกษาที่มีคุณภาพ" },
+    { title: "การจ้างงาน", icon: "fa-briefcase", tone: "#2563eb", focus: "งานที่มีคุณภาพ" },
+    { title: "พลังงาน", icon: "fa-bolt", tone: "#ca8a04", focus: "พลังงานสะอาด, การเข้าถึงพลังงาน, ประสิทธิภาพพลังงาน" },
+    { title: "บริการทางการเงิน", icon: "fa-coins", tone: "#059669", focus: "การเข้าถึงบริการทางการเงิน" },
+    { title: "สุขภาพ", icon: "fa-stethoscope", tone: "#0d9488", focus: "การเข้าถึงบริการสุขภาพที่มีคุณภาพ" },
+    { title: "โครงสร้างพื้นฐาน", icon: "fa-bridge", tone: "#64748b", focus: "โครงสร้างพื้นฐานที่ยืดหยุ่นต่อการเปลี่ยนแปลง" },
+    { title: "ทรัพยากรผืนดินและป่าไม้", icon: "fa-mountain-sun", tone: "#92400e", focus: "การอนุรักษ์ทรัพยากรธรรมชาติ, การจัดการที่ดินอย่างยั่งยืน, การป่าไม้อย่างยั่งยืน" },
+    { title: "ทะเลและเขตชายฝั่ง", icon: "fa-water", tone: "#0369a1", focus: "การอนุรักษ์และจัดการทรัพยากรทางทะเล" },
+    { title: "มลพิษ", icon: "fa-smog", tone: "#6b7280", focus: "การป้องกันมลพิษ" },
+    { title: "ที่อยู่อาศัย", icon: "fa-house", tone: "#e11d48", focus: "ที่อยู่อาศัยคุณภาพในราคาที่เข้าถึงได้, อาคารสีเขียว" },
+    { title: "ขยะและของเสีย", icon: "fa-recycle", tone: "#65a30d", focus: "การจัดการของเสีย" },
+    { title: "ทรัพยากรน้ำ", icon: "fa-droplet", tone: "#0891b2", focus: "การจัดการน้ำอย่างยั่งยืน, น้ำ สุขาภิบาล และสุขอนามัย" }
 ];
 
 export const appState = {
@@ -658,45 +661,46 @@ export const appState = {
         document.getElementById(viewId).classList.remove('hidden');
         this.currentView = viewId;
 
-        if (viewId === 'view-landing') this.initLandingCarousel();
+        // The pink-framed backdrop belongs to the landing/sign-in screens only; the
+        // data-entry steps keep the plain background so forms stay easy on the eyes.
+        document.body.classList.toggle('landing-bg', viewId !== 'view-app');
+
+        if (viewId === 'view-landing') {
+            this.initLandingGallery();
+            this.initLandingStats();
+        }
     },
 
-    carouselTimer: null,
+    // Landing page's vertical gallery. Idempotent: re-entering view-landing (e.g.
+    // "กลับหน้าหลัก" from the member sign-in form) must not clone the set a second time,
+    // which would double the track's length and break the seamless-loop maths below.
+    initLandingGallery() {
+        const track = document.getElementById('landing-gallery-track');
+        if (!track || track.dataset.ready) return;
 
-    // Landing page's rotating banner. Guarded by carouselTimer so re-entering
-    // view-landing (e.g. "กลับหน้าหลัก" from the member sign-in form) doesn't stack
-    // a second interval on top of the first, doubling the rotation speed.
-    initLandingCarousel() {
-        const slides = document.querySelectorAll('#landing-carousel [data-carousel-slide]');
-        const dotsContainer = document.getElementById('landing-carousel-dots');
-        if (!slides.length || !dotsContainer) return;
+        const items = Array.from(track.querySelectorAll('[data-gallery-item]'));
+        if (!items.length) return;
 
-        if (this.carouselTimer) return; // already running
+        // The track scrolls exactly one set's height then restarts, so the second copy
+        // has to sit directly after the first and look identical.
+        items.forEach(item => {
+            const copy = item.cloneNode(true);
+            copy.removeAttribute('data-gallery-item');
+            copy.alt = '';
+            copy.setAttribute('aria-hidden', 'true');
+            track.appendChild(copy);
+        });
 
-        let active = 0;
-        const dots = slides.length > 1
-            ? Array.from(slides).map((_, index) => {
-                const dot = document.createElement('button');
-                dot.type = 'button';
-                dot.setAttribute('aria-label', `Slide ${index + 1}`);
-                dot.className = 'w-2 h-2 rounded-full transition-colors ' + (index === 0 ? 'bg-white' : 'bg-white/50');
-                dot.onclick = () => showSlide(index);
-                dotsContainer.appendChild(dot);
-                return dot;
-            })
-            : [];
+        // ~7s per picture keeps the motion readable however many photos get added.
+        track.style.setProperty('--gallery-duration', `${items.length * 7}s`);
+        track.dataset.ready = 'true';
+    },
 
-        const showSlide = (index) => {
-            slides[active].classList.replace('opacity-100', 'opacity-0');
-            dots[active]?.classList.replace('bg-white', 'bg-white/50');
-            active = index;
-            slides[active].classList.replace('opacity-0', 'opacity-100');
-            dots[active]?.classList.replace('bg-white/50', 'bg-white');
-        };
-
-        this.carouselTimer = window.setInterval(() => {
-            showSlide((active + 1) % slides.length);
-        }, 4000);
+    initLandingStats() {
+        initLandingStats({
+            sdgs: SDGs_LIST,
+            categories: PROJECT_CATEGORIES
+        });
     },
 
     async login() {
