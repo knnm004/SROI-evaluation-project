@@ -35,10 +35,25 @@
                 <div class="flex items-center gap-6">
                     <nav id="landing-nav" class="hidden md:flex items-center gap-6 text-sm sm:text-base font-medium text-gray-500">
                         <a href="/index.html" class="hover:text-chula-dark transition-colors">หน้าหลัก</a>
-                        <!-- Hidden once signed in (appState hides #about-nav-link and #about-us-nav-link alongside
-                             showing #nav-user) -- it's public marketing/info content, not
+                        <!-- Hidden once signed in (appState hides #about-nav-link and #about-us-nav-link
+                             alongside showing #nav-user) -- public marketing/info content, not
                              something needed while already inside the authenticated app. -->
-                        <a href="/about.html" id="about-nav-link" class="hover:text-chula-dark transition-colors">เกี่ยวกับระบบ</a>
+                        <!-- "เกี่ยวกับระบบ" with a language menu. Opens on hover AND on keyboard focus
+                             (see .lang-menu in style.css), so it is not mouse-only. The menu sits flush under the link
+                             (padding, not a margin gap) so moving the pointer down to it never closes it. The
+                             wrapper carries the id the landing page uses to hide this link once signed in. -->
+                        <div id="about-nav-link" class="relative group">
+                            <a href="/about.html" class="hover:text-chula-dark transition-colors inline-flex items-center gap-1.5" aria-haspopup="true">
+                                เกี่ยวกับระบบ
+                                <i class="fa-solid fa-chevron-down text-[0.65em] transition-transform duration-200 group-hover:rotate-180 group-focus-within:rotate-180" aria-hidden="true"></i>
+                            </a>
+                            <div class="lang-menu absolute left-1/2 top-full pt-3 z-50">
+                                <ul class="min-w-[9.5rem] bg-white rounded-xl shadow-lg border border-gray-100 py-1.5" data-testid="about-lang-menu">
+                                    <li><a href="/about.html?lang=th" data-lang-option="th" class="block px-4 py-2 text-gray-700 hover:bg-chula hover:bg-opacity-10 hover:text-chula-dark">ภาษาไทย</a></li>
+                                    <li><a href="/about.html?lang=en" data-lang-option="en" class="block px-4 py-2 text-gray-700 hover:bg-chula hover:bg-opacity-10 hover:text-chula-dark">English</a></li>
+                                </ul>
+                            </div>
+                        </div>
                         <a href="/about-us.html" id="about-us-nav-link" class="hover:text-chula-dark transition-colors">เกี่ยวกับเรา</a>
                     </nav>
                     <div id="nav-user" class="hidden flex items-center gap-2">

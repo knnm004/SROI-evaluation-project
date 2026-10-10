@@ -1178,3 +1178,27 @@ body.login-bg::after {
    snap offset and heights are measured from it -- change the header, change this. */
 :root { --site-header-h: 4.25rem; }            /* h-16 + border: phones keep the compact bar */
 @media (min-width: 640px) { :root { --site-header-h: 5.25rem; } }  /* sm:h-20 + border */
+
+/* ===== Top bar: "เกี่ยวกับระบบ" language menu ======================================== */
+/* Shown while the wrapper (.group) is hovered OR contains keyboard focus, so it is not
+   mouse-only. Opening is instant -- `visibility` flips with no delay, which is what makes
+   the options focusable the moment the trigger is, whatever the frame rate -- while
+   closing keeps `visibility` for the length of the fade so it can actually fade out.
+   padding-top (not a margin) on the menu keeps it touching the trigger's hover area, so
+   moving the pointer down to it never drops the hover. */
+.lang-menu {
+  visibility: hidden;
+  opacity: 0;
+  transform: translate(-50%, 0.25rem);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+}
+.group:hover > .lang-menu,
+.group:focus-within > .lang-menu {
+  visibility: visible;
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lang-menu { transition: none; }
+}

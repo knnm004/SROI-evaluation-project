@@ -25,7 +25,22 @@
                 </a>
                 <nav class="hidden md:flex items-center gap-6 text-sm sm:text-base font-medium text-gray-500">
                     <a href="/index.html" class="hover:text-chula-dark transition-colors">หน้าหลัก</a>
-                    <a href="/about.html" class="text-chula-dark font-semibold">เกี่ยวกับระบบ</a>
+                    <!-- "เกี่ยวกับระบบ" with a language menu. Opens on hover AND on keyboard focus
+                         (see .lang-menu in style.css), so it is not mouse-only. The menu sits flush under the link
+                         (padding, not a margin gap) so moving the pointer down to it never closes it. The
+                         wrapper carries the id the landing page uses to hide this link once signed in. -->
+                    <div class="relative group">
+                        <a href="/about.html" class="text-chula-dark font-semibold inline-flex items-center gap-1.5" aria-haspopup="true" aria-current="page">
+                            เกี่ยวกับระบบ
+                            <i class="fa-solid fa-chevron-down text-[0.65em] transition-transform duration-200 group-hover:rotate-180 group-focus-within:rotate-180" aria-hidden="true"></i>
+                        </a>
+                        <div class="lang-menu absolute left-1/2 top-full pt-3 z-50">
+                            <ul class="min-w-[9.5rem] bg-white rounded-xl shadow-lg border border-gray-100 py-1.5" data-testid="about-lang-menu">
+                                <li><a href="/about.html?lang=th" data-lang-option="th" class="block px-4 py-2 text-gray-700 hover:bg-chula hover:bg-opacity-10 hover:text-chula-dark">ภาษาไทย</a></li>
+                                <li><a href="/about.html?lang=en" data-lang-option="en" class="block px-4 py-2 text-gray-700 hover:bg-chula hover:bg-opacity-10 hover:text-chula-dark">English</a></li>
+                            </ul>
+                        </div>
+                    </div>
                     <a href="/about-us.html" class="hover:text-chula-dark transition-colors">เกี่ยวกับเรา</a>
                 </nav>
             </div>
@@ -44,13 +59,6 @@
              class="w-full max-w-sm mx-auto mb-6">
 
         <div class="bg-white border border-gray-200 rounded-2xl p-5 sm:p-8 shadow-sm">
-            <div class="flex gap-2 mb-5">
-                <button type="button" onclick="showIntroLang('th')" data-intro-tab="th"
-                        data-testid="intro-tab-th" class="framework-tab framework-tab-active">ภาษาไทย</button>
-                <button type="button" onclick="showIntroLang('en')" data-intro-tab="en"
-                        data-testid="intro-tab-en" class="framework-tab framework-tab-idle">English</button>
-            </div>
-
             <div data-intro-lang="th" class="text-sm sm:text-base text-gray-600 leading-relaxed space-y-4">
                 <p>Chula Triple S System คือระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย ออกแบบสำหรับผู้บริหาร นักวิชาการ และนักวิจัย เพื่อช่วยวิเคราะห์เส้นทางการสร้างผลกระทบ กำหนดผลลัพธ์และตัวชี้วัด ติดตามการเปลี่ยนแปลงที่เกิดขึ้น และเชื่อมโยงผลงานกับเป้าหมายการพัฒนาที่ยั่งยืน (SDGs)</p>
                 <p>ระบบช่วยเปลี่ยนข้อมูลจากการดำเนินโครงการให้เป็นหลักฐานเชิงประจักษ์สำหรับพัฒนางาน ขยายผล และนำองค์ความรู้จากการวิจัยและนวัตกรรมไปแก้ไขปัญหาสังคมอย่างยั่งยืน ขณะเดียวกันผู้บริหารสามารถใช้ข้อมูลประกอบการกำหนดนโยบาย จัดสรรทรัพยากร และตัดสินใจเชิงยุทธศาสตร์ เพื่อยกระดับผลกระทบทางสังคมของมหาวิทยาลัยให้เกิดคุณค่าอย่างเป็นรูปธรรม</p>
