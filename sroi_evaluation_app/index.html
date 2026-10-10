@@ -12,19 +12,19 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
+<body class="landing-bg bg-gray-50 text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
 
     <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
+            <div class="flex justify-between items-center h-16 sm:h-20">
                 <div class="flex items-center gap-3 cursor-pointer" onclick="appState.goHome()">
-                    <img src="/images/chula-logo.png" alt="Chulalongkorn University" class="h-11 w-auto shrink-0 object-contain">
+                    <img src="/images/chula-logo.png" alt="Chulalongkorn University" class="h-11 sm:h-14 w-auto shrink-0 object-contain">
                     <!-- No "Chulalongkorn University" subtitle here: the logo itself
                          already spells that out, so repeating it as text was
                          redundant right next to it. -->
                     <div class="flex flex-col min-w-0 leading-tight">
-                        <h1 class="text-base font-bold text-gray-900 whitespace-nowrap">ระบบประเมินผลตอบแทนทางสังคม</h1>
-                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">Chula Triple S System</span>
+                        <h1 class="text-base sm:text-xl font-bold text-gray-900 whitespace-nowrap">ระบบประเมินผลตอบแทนทางสังคม</h1>
+                        <span class="text-xs sm:text-sm text-gray-500 font-medium whitespace-nowrap">Chula Triple S System</span>
                     </div>
                 </div>
                 <!--
@@ -33,19 +33,35 @@
                   justify-between with a big empty gap in between.
                 -->
                 <div class="flex items-center gap-6">
-                    <nav id="landing-nav" class="hidden md:flex items-center gap-6 text-sm font-medium text-gray-500">
+                    <nav id="landing-nav" class="hidden md:flex items-center gap-6 text-sm sm:text-base font-medium text-gray-500">
                         <a href="/index.html" class="hover:text-chula-dark transition-colors">หน้าหลัก</a>
-                        <!-- Hidden once signed in (appState hides #about-nav-link alongside
-                             showing #nav-user) -- it's public marketing/info content, not
+                        <!-- Hidden once signed in (appState hides #about-nav-link and #about-us-nav-link
+                             alongside showing #nav-user) -- public marketing/info content, not
                              something needed while already inside the authenticated app. -->
-                        <a href="/about.html" id="about-nav-link" class="hover:text-chula-dark transition-colors">เกี่ยวกับระบบ</a>
+                        <!-- "เกี่ยวกับระบบ" with a language menu. Opens on hover AND on keyboard focus
+                             (see .lang-menu in style.css), so it is not mouse-only. The menu sits flush under the link
+                             (padding, not a margin gap) so moving the pointer down to it never closes it. The
+                             wrapper carries the id the landing page uses to hide this link once signed in. -->
+                        <div id="about-nav-link" class="relative group">
+                            <a href="/about.html" class="hover:text-chula-dark transition-colors inline-flex items-center gap-1.5" aria-haspopup="true">
+                                เกี่ยวกับระบบ
+                                <i class="fa-solid fa-chevron-down text-[0.65em] transition-transform duration-200 group-hover:rotate-180 group-focus-within:rotate-180" aria-hidden="true"></i>
+                            </a>
+                            <div class="lang-menu absolute left-1/2 top-full pt-3 z-50">
+                                <ul class="min-w-[9.5rem] bg-white rounded-xl shadow-lg border border-gray-100 py-1.5" data-testid="about-lang-menu">
+                                    <li><a href="/about.html?lang=th" data-lang-option="th" class="block px-4 py-2 text-gray-700 hover:bg-chula hover:bg-opacity-10 hover:text-chula-dark">ภาษาไทย</a></li>
+                                    <li><a href="/about.html?lang=en" data-lang-option="en" class="block px-4 py-2 text-gray-700 hover:bg-chula hover:bg-opacity-10 hover:text-chula-dark">English</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <a href="/about-us.html" id="about-us-nav-link" class="hover:text-chula-dark transition-colors">เกี่ยวกับเรา</a>
                     </nav>
                     <div id="nav-user" class="hidden flex items-center gap-2">
-                        <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
+                        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
                             <i class="fa-solid fa-user"></i>
                         </div>
-                        <span class="text-sm font-medium" id="user-email-display">researcher@chula.ac.th</span>
-                        <button onclick="appState.logout()" class="ml-4 text-sm text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
+                        <span class="text-sm sm:text-base font-medium" id="user-email-display">researcher@chula.ac.th</span>
+                        <button onclick="appState.logout()" class="ml-4 text-sm sm:text-base text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
                     </div>
                 </div>
             </div>
@@ -54,7 +70,7 @@
 
     <main class="relative flex-grow flex flex-col items-center justify-center p-4 sm:p-6 w-full max-w-7xl mx-auto">
 
-        <div id="view-landing" class="relative overflow-hidden w-full max-w-7xl mx-auto fade-in">
+        <div id="view-landing" class="relative overflow-x-clip w-full max-w-7xl mx-auto fade-in">
             <!--
               Purely decorative -- the two starburst motifs sit behind the content
               (-z-10), extend past the narrow text column into the empty margins
@@ -110,68 +126,144 @@
             </div>
 
             <!--
-              Split-screen on wide viewports: the carousel fills the entire left half
-              at full section height, text sits on the right. object-cover (not
-              fill/stretch) keeps every photo at its native aspect ratio, cropping
-              only what's needed to fill the box. The right edge of the image blends
-              into the page background via a blurred + gradient-faded strip
-              (#landing-carousel-fade) rather than a hard seam -- it's semi-
-              transparent blur, not a solid cutout, so nothing in that strip is fully
-              hidden, and it's narrow enough (28% of the image width) to stay clear of
-              whatever's in the middle of each photo. Mobile has no spare width for a
-              side-by-side split, so it stacks: a shorter, edge-to-edge banner on top,
-              text below, no fade strip.
-              appState.initLandingCarousel() (called from showView()) drives the
-              crossfade + dots; pure CSS opacity transition, no library.
+              Scene 1 of 2 (the overview below is scene 2). Each scene fills the viewport
+              and is a scroll-snap stop, so the page reads as separate "screens"; the cue at
+              the bottom and the side dots (src/lib/landingSections.js) only appear once
+              there actually is a second scene to scroll to.
+              Wide screens: gallery left, copy right. Mobile stacks them.
+              The gallery is a drifting photo wall driven by appState.initLandingGallery();
+              its right edge is blurred into the page backdrop rather than cut hard.
             -->
-            <div class="lg:flex lg:items-stretch lg:min-h-[70vh] lg:gap-10">
-                <div class="relative w-full h-56 sm:h-72 lg:h-auto lg:w-1/2 lg:flex-shrink-0 overflow-hidden rounded-2xl shadow-sm mb-6 lg:mb-0"
-                     id="landing-carousel" data-testid="landing-carousel">
-                    <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-carousel-slide
-                         class="absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-700 opacity-100">
-                    <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-carousel-slide
-                         class="absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-700 opacity-0">
-                    <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-carousel-slide
-                         class="absolute inset-0 w-full h-full object-contain bg-white p-4 transition-opacity duration-700 opacity-0">
-                    <div class="hidden lg:block absolute inset-y-0 right-0 w-[28%] pointer-events-none"
-                         style="background: linear-gradient(to right, transparent, #f9fafb); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); -webkit-mask-image: linear-gradient(to right, transparent, black); mask-image: linear-gradient(to right, transparent, black);"
-                         aria-hidden="true"></div>
-                    <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-10" id="landing-carousel-dots"></div>
+            <div id="landing-hero" data-testid="landing-hero" class="landing-scene landing-scene-hero relative">
+                <div class="lg:flex lg:items-center lg:gap-14 w-full flex-1">
+                    <div class="relative w-full h-72 sm:h-80 lg:h-[min(36rem,calc(100svh-15rem))] lg:w-1/2 lg:flex-shrink-0 overflow-hidden rounded-[1.75rem] mb-8 lg:mb-0"
+                         id="landing-carousel" data-testid="landing-carousel">
+                        <!--
+                          PHOTO WALL. To add a picture, add another <img data-gallery-item ...>
+                          line to the list below -- that is the only edit needed. The wall
+                          (src/lib/landingPhotoWall.js) spreads them over several columns that
+                          drift in opposite directions; clicking a photo opens it large. Add
+                          data-fit="contain" to artwork that must not be cropped. The list is
+                          placeholder duplication until more photos are supplied. Aim for 12+
+                          photos, and resize them to ~900px wide first (the wall loads them all).
+                        -->
+                        <div class="absolute inset-0 landing-gallery-viewport">
+                            <div id="landing-photo-wall" class="photo-wall" role="group" aria-label="ภาพกิจกรรมของโครงการ"></div>
+                        </div>
+                        <div id="landing-gallery-source" hidden>
+                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item data-fit="contain">
+                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item data-fit="contain">
+                        </div>
+                        <!-- Frosted blur that ramps in toward the right. No solid colour on purpose: the photos themselves fade to transparent (see .landing-gallery-viewport), so there is no coloured edge to mismatch the page backdrop. -->
+                        <div class="hidden lg:block absolute inset-y-0 right-0 w-[22%] pointer-events-none"
+                             style="-webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px); -webkit-mask-image: linear-gradient(to right, transparent, black 85%); mask-image: linear-gradient(to right, transparent, black 85%);"
+                             aria-hidden="true"></div>
+                    </div>
+
+                    <div class="lg:w-1/2 flex flex-col justify-center text-center lg:text-left">
+                        <p class="hero-rise text-lg md:text-xl font-semibold text-chula mb-1" style="--d:0">Chula Triple S System</p>
+                        <h2 class="hero-rise text-2xl md:text-4xl font-bold text-gray-900 mb-3" style="--d:1">ระบบประเมินผลตอบแทนทางสังคม</h2>
+                        <p class="hero-rise hero-lead mx-auto lg:mx-0" style="--d:2">
+                            ระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย
+
+                            <br><br>เข้าสู่ระบบเพื่อเริ่มต้นกรอกข้อมูล ประเมินผล และออกรายงานฉบับสมบูรณ์
+                        </p>
+                        <div class="hero-rise flex flex-col sm:flex-row gap-3 justify-center lg:justify-start items-stretch" style="--d:3" data-testid="landing-auth-actions">
+                            <button type="button" onclick="appState.login()" data-testid="login-google-btn" class="hero-btn hero-btn-primary group">
+                                <i class="fa-brands fa-google"></i> เข้าสู่ระบบด้วยบัญชีจุฬาฯ
+                                <i class="fa-solid fa-arrow-right text-sm transition-transform duration-300 group-hover:translate-x-1"></i>
+                            </button>
+                            <button type="button" onclick="appState.showView('view-login')" data-testid="login-password-open-btn" class="hero-btn hero-btn-secondary">
+                                <i class="fa-solid fa-envelope"></i> สมาชิก/บุคคลทั่วไป
+                            </button>
+                        </div>
+                        <p class="hero-rise text-sm text-gray-400 mt-4" style="--d:4">
+                            บุคลากรและนิสิตใช้บัญชีจุฬาฯ &middot; สมาชิกภายนอกใช้อีเมลและรหัสผ่านที่ผู้ดูแลระบบออกให้
+                        </p>
+                    </div>
                 </div>
 
-                <div class="lg:w-1/2 flex flex-col justify-center text-center lg:text-left">
-                    <h2 class="text-2xl md:text-4xl font-bold text-gray-900 mb-1">ระบบประเมินผลตอบแทนทางสังคม</h2>
-                    <p class="text-lg md:text-xl font-semibold text-chula mb-3">Chula Triple S System</p>
-                    <p class="text-base md:text-lg text-gray-600 mb-4 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-                        ระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย
+                <!-- "More below" cue. In normal flow under the content (not overlaid on it, so it can never sit on the gallery). Not rendered at all until the overview exists; fades out once you scroll. -->
+                <button type="button" id="landing-scroll-cue" data-testid="landing-scroll-cue" class="landing-scroll-cue" aria-label="เลื่อนลงเพื่อดูภาพรวมโครงการ">
+                    <span class="cue-label">เลื่อนลงเพื่อดูภาพรวมโครงการ</span>
+                    <span class="cue-mouse" aria-hidden="true"></span>
+                </button>
+            </div>
 
-                        <br><br>เข้าสู่ระบบเพื่อเริ่มต้นกรอกข้อมูล ประเมินผล และออกรายงานฉบับสมบูรณ์
-                    </p>
-                    <div class="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start items-stretch" data-testid="landing-auth-actions">
-                        <button type="button" onclick="appState.login()" data-testid="login-google-btn"
-                                class="bg-chula hover:bg-chula-dark text-white font-medium py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-base whitespace-nowrap">
-                            <i class="fa-brands fa-google mr-2"></i> เข้าสู่ระบบด้วยบัญชีจุฬาฯ
-                        </button>
-                        <button type="button" onclick="appState.showView('view-login')" data-testid="login-password-open-btn"
-                                class="bg-white hover:bg-gray-50 text-chula-darker font-medium py-3 px-8 rounded-full border-2 border-chula-light shadow-sm transition-all duration-300 transform hover:-translate-y-1 text-base whitespace-nowrap">
-                            <i class="fa-solid fa-envelope mr-2"></i> สมาชิก/บุคคลทั่วไป
+            <!-- Side dots: which scene you're on, and a click-to-jump. Large screens only. -->
+            <nav id="landing-section-nav" data-testid="landing-section-nav" class="landing-nav hidden lg:flex" aria-label="ส่วนต่าง ๆ ของหน้า">
+                <button type="button" data-scene="landing-hero" class="landing-nav-dot is-active" aria-label="หน้าแรก"><span class="landing-nav-label">หน้าแรก</span></button>
+                <button type="button" data-scene="landing-stats" class="landing-nav-dot" aria-label="ภาพรวมโครงการ"><span class="landing-nav-label">ภาพรวมโครงการ</span></button>
+            </nav>
+
+            <!--
+              Project overview. Hidden until appState.initLandingStats() has real numbers
+              (it stays hidden if the stats function isn't set up, rather than showing a
+              broken panel to visitors). Everything inside is filled by
+              src/lib/landingStats.js from get_public_project_stats(), which returns
+              counts only -- see supabase/migrations/0009_public_project_stats.sql.
+            -->
+            <section id="landing-stats" data-testid="landing-stats"
+                     class="landing-stats landing-scene hidden relative mt-6 overflow-hidden px-5 py-8 sm:px-10 sm:py-12"
+                     aria-labelledby="landing-stats-heading">
+                <div class="stats-blob stats-blob-a" aria-hidden="true"></div>
+                <div class="stats-blob stats-blob-b" aria-hidden="true"></div>
+
+                <div class="relative z-10">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                        <p id="landing-stats-heading" class="stats-eyebrow">
+                            <span class="stats-eyebrow-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                            Impact overview &middot; ภาพรวมโครงการในระบบ
+                        </p>
+                        <button type="button" id="landing-stats-reset" data-testid="landing-stats-reset"
+                                class="hidden stats-reset">
+                            <i class="fa-solid fa-rotate-left mr-1"></i>ล้างตัวกรอง
                         </button>
                     </div>
-                    <p class="text-sm text-gray-400 mt-3">
-                        บุคลากรและนิสิตใช้บัญชีจุฬาฯ &middot; สมาชิกภายนอกใช้อีเมลและรหัสผ่านที่ผู้ดูแลระบบออกให้
-                    </p>
+
+                    <p id="landing-stats-sentence" data-testid="landing-stats-sentence" class="stats-sentence" aria-live="polite"></p>
+
+                    <div class="stats-rail-head">
+                        <h4>หมวดหมู่โครงการ</h4>
+                        <span>เลื่อนดู คลิกเพื่อกรอง</span>
+                    </div>
+                    <div class="stats-rail-wrap">
+                        <div id="landing-stats-categories" data-testid="landing-stats-categories" class="stats-rail"></div>
+                    </div>
+
+                    <div class="stats-rail-head mt-2">
+                        <h4>เป้าหมายการพัฒนาที่ยั่งยืน (SDGs)</h4>
+                        <span>คลิกเพื่อกรองตามเป้าหมาย</span>
+                    </div>
+                    <div class="stats-rail-wrap">
+                        <div id="landing-stats-sdgs" data-testid="landing-stats-sdgs" class="stats-rail"></div>
+                    </div>
+
+                    <div class="stats-footer">
+                        <p class="stats-sentence-sm">
+                            โครงการเหล่านี้เชื่อมโยงกับเป้าหมายการพัฒนาที่ยั่งยืน (SDGs) แล้ว
+                            <span class="stats-inline-pill stats-inline-pill-solid"><span id="landing-stats-linked">0</span> เป้าหมาย</span>
+                            จากทั้งหมด 17 เป้าหมายระดับสากล
+                        </p>
+                        <div id="landing-stats-dots" data-testid="landing-stats-dots" class="stats-dots" role="group" aria-label="เป้าหมาย SDGs 17 ข้อ"></div>
+                    </div>
+                    <p id="landing-stats-note" class="stats-note"></p>
                 </div>
-            </div>
+            </section>
         </div>
-        <div id="view-login" class="hidden w-full max-w-md fade-in bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div id="view-login" class="hidden w-full max-w-xl fade-in bg-white rounded-3xl shadow-2xl overflow-hidden">
             <!--<div class="bg-chula p-6 text-center text-white">
                 <i class="fa-solid fa-circle-user text-5xl mb-3"></i>
                 <h2 class="text-2xl font-bold">เข้าสู่ระบบ</h2>
                 <p class="text-sm opacity-90">สำหรับบุคลากรและนิสิตจุฬาลงกรณ์มหาวิทยาลัย</p>
             </div> -->
-            <div class="p-8">
-                <h2 class="text-xl font-bold text-gray-900 mb-1">เข้าสู่ระบบสำหรับสมาชิก</h2>
-                <p class="text-sm text-gray-500 mb-6">Member sign-in (email &amp; password)</p>
+            <div class="p-6 sm:p-10">
+                <h2 class="text-3xl font-bold text-gray-900 mb-2">เข้าสู่ระบบสำหรับสมาชิก</h2>
+                <p class="text-lg text-gray-500 mb-8">Member sign-in (email &amp; password)</p>
 
                 <!--
                   There is deliberately NO sign-up and NO forgot-password link.
@@ -182,50 +274,50 @@
                 -->
                 <form data-testid="login-password-form" novalidate
                       onsubmit="appState.loginWithPassword(event); return false;">
-                    <div class="mb-4 text-left">
-                        <label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">อีเมล (Email)</label>
+                    <div class="mb-6 text-left">
+                        <label for="login-email" class="block text-lg font-medium text-gray-700 mb-2">อีเมล (Email)</label>
                         <input type="email" id="login-email" name="email" required
                                autocomplete="username" inputmode="email" placeholder="you@example.com"
                                data-testid="login-email-input"
-                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-chula outline-none">
+                               class="w-full px-5 py-3.5 text-lg border rounded-xl focus:ring-2 focus:ring-chula outline-none">
                     </div>
 
-                    <div class="mb-2 text-left">
-                        <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน (Password)</label>
+                    <div class="mb-3 text-left">
+                        <label for="login-password" class="block text-lg font-medium text-gray-700 mb-2">รหัสผ่าน (Password)</label>
                         <div class="relative">
                             <input type="password" id="login-password" name="password" required
                                    autocomplete="current-password"
                                    data-testid="login-password-input"
-                                   class="w-full px-4 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-chula outline-none">
+                                   class="w-full px-5 py-3.5 pr-14 text-lg border rounded-xl focus:ring-2 focus:ring-chula outline-none">
                             <button type="button" onclick="appState.togglePasswordVisibility()"
                                     aria-label="แสดงหรือซ่อนรหัสผ่าน" data-testid="login-password-toggle"
-                                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                    class="absolute right-4 top-1/2 -translate-y-1/2 text-xl text-gray-400 hover:text-gray-600">
                                 <i class="fa-regular fa-eye" id="login-password-toggle-icon"></i>
                             </button>
                         </div>
                     </div>
 
                     <p id="login-error" role="alert" aria-live="polite" data-testid="login-error"
-                       class="hidden text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-3 text-left"></p>
+                       class="hidden text-base text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mt-4 text-left"></p>
 
                     <button type="submit" id="login-submit" data-testid="login-submit-btn"
-                            class="w-full mt-5 bg-chula hover:bg-chula-dark text-white font-medium py-3 rounded-lg shadow transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                            class="w-full mt-7 bg-chula hover:bg-chula-dark text-white font-semibold text-xl py-4 rounded-xl shadow transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
                         เข้าสู่ระบบ <i class="fa-solid fa-arrow-right ml-1"></i>
                     </button>
                 </form>
 
-                <p class="text-xs text-gray-400 mt-4">
+                <p class="text-sm text-gray-500 mt-5">
                     บัญชีสมาชิกออกให้โดยผู้ดูแลระบบ (Member accounts are issued by an administrator)
                 </p>
 
-                <div class="mt-6 pt-4 border-t border-gray-100 space-y-2">
+                <div class="mt-8 pt-6 border-t border-gray-100 space-y-3">
                     <button type="button" onclick="appState.login()" data-testid="login-google-alt-btn"
-                            class="text-sm font-semibold text-chula-darker hover:underline">
+                            class="text-lg font-semibold text-chula-darker hover:underline">
                         <i class="fa-brands fa-google mr-1"></i> ใช้บัญชีจุฬาฯ แทน
                     </button>
                     <div>
                         <button type="button" onclick="appState.showView('view-landing')" data-testid="login-back-btn"
-                                class="text-sm text-gray-500 hover:text-chula-dark">
+                                class="text-lg text-gray-500 hover:text-chula-dark">
                             <i class="fa-solid fa-arrow-left mr-1"></i> กลับหน้าหลัก
                         </button>
                     </div>
@@ -830,6 +922,30 @@
                     </button>
                 </div>
                 <div class="p-6 overflow-y-auto flex-grow bg-white" id="modal-report-content"></div>
+
+                <!--
+                  Completion status. The system pre-sets the switch from what it finds
+                  (appState.renderCompletionBar), but the person has the final say -- what they
+                  leave it on is what the dashboard card shows. Pinned between the scrolling
+                  report and the buttons so it is always in view when confirming.
+                -->
+                <div id="completion-bar" data-testid="completion-bar" class="px-6 py-4 border-t border-gray-200 bg-white">
+                    <div class="flex items-start gap-5 flex-wrap">
+                        <label class="inline-flex items-center gap-3 cursor-pointer select-none shrink-0">
+                            <span class="relative inline-block">
+                                <input type="checkbox" id="completion-switch" data-testid="completion-switch"
+                                       class="peer sr-only" onchange="appState.updateCompletionBar()">
+                                <span class="block w-14 h-8 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 peer-focus-visible:ring-4 peer-focus-visible:ring-green-200"></span>
+                                <span class="absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow transition-transform peer-checked:translate-x-6"></span>
+                            </span>
+                            <span>
+                                <span class="block font-bold text-gray-900">กรอกข้อมูลครบถ้วนแล้ว</span>
+                                <span id="completion-state-text" class="block text-sm text-gray-500"></span>
+                            </span>
+                        </label>
+                        <div id="completion-detail" class="flex-1 min-w-[16rem] text-sm" aria-live="polite"></div>
+                    </div>
+                </div>
                 <div class="p-5 border-t border-gray-200 bg-gray-50 flex justify-end gap-4 rounded-b-2xl">
                     <button type="button" onclick="appState.hideRecheckModal()" class="px-6 py-2.5 border border-gray-300 text-gray-700 bg-white rounded-xl hover:bg-gray-50 font-semibold shadow-sm transition-colors">
                         กลับไปแก้ไข

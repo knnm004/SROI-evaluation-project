@@ -8,6 +8,7 @@ module.exports = {
     "./dashboard.html",
     "./admin.html",
     "./about.html",
+    "./about-us.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {

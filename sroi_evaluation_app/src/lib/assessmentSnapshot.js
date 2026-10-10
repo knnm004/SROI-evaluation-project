@@ -61,6 +61,12 @@ export function serialiseAssessment(state) {
         sroiRows: state.sroiRows,
         uploadedImage: state.uploadedImage ?? null,
         activityImages: state.activityImages ?? [],
+        // What the person said at the recheck-and-save screen: true = "filled in completely",
+        // false = "still unfinished", null = never asked (projects saved before the switch
+        // existed). Optional on purpose, so older rows need no migration and no version bump.
+        completion: {
+            declaredComplete: typeof state.declaredComplete === 'boolean' ? state.declaredComplete : null
+        },
         savedAt: new Date().toISOString()
     };
 }
@@ -72,6 +78,10 @@ export function serialiseAssessment(state) {
  */
 export function deserialiseAssessment(snapshot, state) {
     if (!snapshot) return { currentStep: 1 };
+
+    state.declaredComplete = typeof snapshot.completion?.declaredComplete === 'boolean'
+        ? snapshot.completion.declaredComplete
+        : null;
 
     // SROI rows first: renderSROIRows() replaces the rows container, so restoring
     // fields before this point would have their values discarded.
