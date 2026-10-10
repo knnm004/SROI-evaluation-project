@@ -817,7 +817,15 @@
 .cat-body { display: flex; flex-direction: column; min-width: 0; }
 .cat-name {
   font-size: 0.875rem;
-  line-height: 1.35;
+  /* Thai stacks vowels and tone marks ABOVE the line. overflow:hidden (required by the line
+     clamp) slices at the box edge, so with a tight line-height the marks were cut off --
+     "น้ำ" read as "นำ", "ที่" as "ที". A taller line-height plus top padding gives them
+     room (negative margin keeps the layout where it was). Padding goes on TOP ONLY: with
+     bottom padding the clamped-away next line peeks through it. Lower vowels (ุ ู) already
+     fit inside the taller line box. */
+  line-height: 1.7;
+  padding-top: 0.3em;
+  margin-top: -0.3em;
   color: #6b7280;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -871,7 +879,10 @@
 .sdg-title {
   font-size: 0.8rem;
   font-weight: 600;
-  line-height: 1.3;
+  /* Same Thai tone-mark clipping as .cat-name above -- see the note there. */
+  line-height: 1.65;
+  padding-top: 0.35em;
+  margin-top: -0.35em;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -1202,3 +1213,15 @@ body.login-bg::after {
 @media (prefers-reduced-motion: reduce) {
   .lang-menu { transition: none; }
 }
+
+/* ===== Landing hero: the name block ================================================= */
+/* The Thai title's size comes from --hero-name-size (it was text-2xl / md:text-4xl). The
+   English "Chula Triple S System" above it is a fixed multiple of that, chosen by
+   measuring the rendered glyphs: at 1.07x, its right edge lands on the "น" ending
+   "ตอบแทน" in ระบบประเมินผลตอบแทนทางสังคม (about 73% of the Thai line's width). Because both
+   follow the same variable, that alignment holds at every breakpoint. Change the 1.07 to
+   move where the English line ends. */
+.hero-name { --hero-name-size: 1.5rem; }
+@media (min-width: 768px) { .hero-name { --hero-name-size: 2.25rem; } }
+.hero-name-th { font-size: var(--hero-name-size); line-height: 1.5; }
+.hero-name-en { font-size: calc(var(--hero-name-size) * 1.07); line-height: 1.3; }

@@ -8,8 +8,11 @@
  *
  * DATA: the landing page is viewed before sign-in and RLS blocks anonymous reads of
  * `projects`, so this only ever sees what get_public_project_stats() returns -- counts,
- * never a project (supabase/migrations/0009_public_project_stats.sql). If that
- * function has not been applied yet, the section simply stays hidden.
+ * never a project (supabase/migrations/0009_public_project_stats.sql, narrowed to
+ * completed projects by 0010_public_stats_completed_only.sql). Every number here is over
+ * projects whose owner confirmed they are filled in completely -- which is why the
+ * sentence says "กรอกข้อมูลครบถ้วนแล้ว". If the function has not been applied yet, the
+ * section simply stays hidden.
  *
  * Filter semantics (single SDG x single category, both optional):
  *   none             -> total
@@ -350,7 +353,9 @@ export function mountLandingStats(stats, { sdgs, categories }) {
 
         // The sentence rewrites itself around the active filters.
         const filtered = state.category !== null || state.sdg !== null;
-        lead.textContent = filtered ? 'ในระบบมีโครงการ' : 'ปัจจุบันในระบบมีโครงการที่ลงทะเบียนแล้วทั้งหมด';
+        lead.textContent = filtered
+            ? 'ในระบบมีโครงการที่กรอกข้อมูลครบถ้วนแล้ว'
+            : 'ปัจจุบันในระบบมีโครงการที่กรอกข้อมูลครบถ้วนแล้วทั้งหมด';
         mid.textContent = filtered ? 'อยู่ทั้งหมด' : '';
         tail.textContent = filtered
             ? 'โครงการ'
