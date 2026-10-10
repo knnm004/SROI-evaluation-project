@@ -58,7 +58,7 @@ Vanilla JS + Vite multi-page app. No framework, no router, no state library.
 
 **CDN globals, not bundled:** Leaflet is `window.L` (unpkg, in `index.html`); Font Awesome from cdnjs. A new Leaflet feature uses that global, not an import.
 
-**Styling:** Tailwind with a custom `chula` scale (`chula`, `chula-light`, `chula-dark`, `chula-darker`) and Sarabun. UI copy is Thai-first with English in parentheses.
+**Styling:** Tailwind with a custom `chula` scale (`chula`, `chula-light`, `chula-dark`, `chula-darker`). The **only** typeface is ChulaCharasNew (the CI font, self-hosted from `public/fonts/`, weights 400/700); `font-sans` and `font-mono` both resolve to it, and Leaflet's own font is overridden. Do not add another webfont or a Google Fonts link. UI copy is Thai-first with English in parentheses.
 
 ### Wizard state model
 
