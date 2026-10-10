@@ -663,15 +663,28 @@ export const appState = {
         document.getElementById(viewId).classList.remove('hidden');
         this.currentView = viewId;
 
-        // The pink-framed backdrop belongs to the landing/sign-in screens only; the
-        // data-entry steps keep the plain background so forms stay easy on the eyes.
-        document.body.classList.toggle('landing-bg', viewId !== 'view-app');
+        // Each screen owns its backdrop: the pink-framed one for the landing page, the
+        // Chula photo for member sign-in, and the plain background for the data-entry steps
+        // so forms stay easy on the eyes.
+        document.body.classList.toggle('landing-bg', viewId === 'view-landing');
+        document.body.classList.toggle('login-bg', viewId === 'view-login');
 
         if (viewId === 'view-landing') {
+            this.preloadLoginBackground();
             this.initLandingGallery();
             initLandingSections();
             this.initLandingStats();
         }
+    },
+
+    // Warm the sign-in photo while the visitor is still reading the landing page, so it is
+    // already cached when they click login instead of popping in over a blank backdrop.
+    preloadLoginBackground() {
+        if (this.loginBackgroundPreloaded) return;
+        this.loginBackgroundPreloaded = true;
+        const load = () => { new Image().src = '/images/background_1.webp'; };
+        if ('requestIdleCallback' in window) window.requestIdleCallback(load);
+        else window.setTimeout(load, 1500);
     },
 
     // Landing page's photo wall; see src/lib/landingPhotoWall.js (idempotent).

@@ -1131,3 +1131,45 @@ html.landing-snap:has(body.landing-bg) {
   .photo-tile,
   .landing-nav-dot { transition: none; }
 }
+
+/* ===== Member sign-in backdrop ===================================================== */
+/* Chula photo behind the sign-in card, switched on by appState.showView('view-login') and
+   off on any other screen.
+
+   The source is only 720px wide and gets stretched to fill the screen, which looks blocky if
+   shown sharp. So it is deliberately a soft, atmospheric backdrop: a gentle blur (hides the
+   stretching) under a pale Chula-pink veil (the same tint as the landing page's backdrop, so
+   moving between the two feels like one site). Swap in a >=1920px photo and the blur can
+   drop to ~1px or go entirely.
+
+   The photo also has the Chula logo baked into its top ~20%. It is sized as a fixed box
+   wide enough for the *lower 78%* of the image to cover the screen and bottom-anchored, so
+   that top 22% always sits above the viewport at every window shape. 181.3vh =
+   100vh / (0.78 * 509/720). A real fixed layer (not background-attachment) so iOS works. */
+body.login-bg { background-color: #fdf7fa; }
+body.login-bg::before {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  bottom: 0;
+  left: 50%;
+  width: max(100vw, 181.3vh);
+  aspect-ratio: 720 / 509;
+  /* scale() pushes the blur's soft transparent fringe off-screen */
+  transform: translateX(-50%) scale(1.04);
+  transform-origin: 50% 100%;
+  background: url('/images/background_1.webp') center / 100% 100% no-repeat;
+  filter: blur(4px) saturate(0.96);
+  pointer-events: none;
+}
+body.login-bg::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg,
+    rgba(253, 247, 250, 0.42) 0%,
+    rgba(253, 247, 250, 0.26) 50%,
+    rgba(253, 247, 250, 0.44) 100%);
+  pointer-events: none;
+}
