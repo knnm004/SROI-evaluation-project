@@ -17,6 +17,8 @@ import {
     isSROIRowStarted
 } from './lib/assessmentSnapshot.js';
 import { initLandingStats } from './lib/landingStats.js';
+import { initLandingSections } from './lib/landingSections.js';
+import { initLandingPhotoWall } from './lib/landingPhotoWall.js';
 
 // Helper to scope draft keys per project ID so projects don't bleed into each other
 function getDraftKey() {
@@ -667,33 +669,14 @@ export const appState = {
 
         if (viewId === 'view-landing') {
             this.initLandingGallery();
+            initLandingSections();
             this.initLandingStats();
         }
     },
 
-    // Landing page's vertical gallery. Idempotent: re-entering view-landing (e.g.
-    // "กลับหน้าหลัก" from the member sign-in form) must not clone the set a second time,
-    // which would double the track's length and break the seamless-loop maths below.
+    // Landing page's photo wall; see src/lib/landingPhotoWall.js (idempotent).
     initLandingGallery() {
-        const track = document.getElementById('landing-gallery-track');
-        if (!track || track.dataset.ready) return;
-
-        const items = Array.from(track.querySelectorAll('[data-gallery-item]'));
-        if (!items.length) return;
-
-        // The track scrolls exactly one set's height then restarts, so the second copy
-        // has to sit directly after the first and look identical.
-        items.forEach(item => {
-            const copy = item.cloneNode(true);
-            copy.removeAttribute('data-gallery-item');
-            copy.alt = '';
-            copy.setAttribute('aria-hidden', 'true');
-            track.appendChild(copy);
-        });
-
-        // ~7s per picture keeps the motion readable however many photos get added.
-        track.style.setProperty('--gallery-duration', `${items.length * 7}s`);
-        track.dataset.ready = 'true';
+        initLandingPhotoWall();
     },
 
     initLandingStats() {

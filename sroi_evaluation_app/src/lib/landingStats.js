@@ -392,6 +392,8 @@ export function mountLandingStats(stats, { sdgs, categories }) {
 
     // ---- reveal ------------------------------------------------------------------------
     section.classList.remove('hidden');
+    // Tells landingSections.js there is a second scene now (scroll cue, side dots, snapping).
+    document.dispatchEvent(new CustomEvent('landing-stats-ready'));
     enhanceRail(catRail);
     enhanceRail(sdgRail);
     update(); // zeros + empty bars until the section scrolls into view

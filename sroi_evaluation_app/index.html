@@ -54,7 +54,7 @@
 
     <main class="relative flex-grow flex flex-col items-center justify-center p-4 sm:p-6 w-full max-w-7xl mx-auto">
 
-        <div id="view-landing" class="relative overflow-hidden w-full max-w-7xl mx-auto fade-in">
+        <div id="view-landing" class="relative overflow-x-clip w-full max-w-7xl mx-auto fade-in">
             <!--
               Purely decorative -- the two starburst motifs sit behind the content
               (-z-10), extend past the narrow text column into the empty margins
@@ -110,72 +110,79 @@
             </div>
 
             <!--
-              Split-screen on wide viewports: the carousel fills the entire left half
-              at full section height, text sits on the right. object-cover (not
-              fill/stretch) keeps every photo at its native aspect ratio, cropping
-              only what's needed to fill the box. The right edge of the image blends
-              into the page background via a blurred + gradient-faded strip
-              (#landing-carousel-fade) rather than a hard seam -- it's semi-
-              transparent blur, not a solid cutout, so nothing in that strip is fully
-              hidden, and it's narrow enough (28% of the image width) to stay clear of
-              whatever's in the middle of each photo. Mobile has no spare width for a
-              side-by-side split, so it stacks: a shorter, edge-to-edge banner on top,
-              text below, no fade strip.
-              The left column is a vertical auto-scrolling gallery, driven by
-              appState.initLandingGallery() (called from showView()); pure CSS animation,
-              no library.
+              Scene 1 of 2 (the overview below is scene 2). Each scene fills the viewport
+              and is a scroll-snap stop, so the page reads as separate "screens"; the cue at
+              the bottom and the side dots (src/lib/landingSections.js) only appear once
+              there actually is a second scene to scroll to.
+              Wide screens: gallery left, copy right. Mobile stacks them.
+              The gallery is a drifting photo wall driven by appState.initLandingGallery();
+              its right edge is blurred into the page backdrop rather than cut hard.
             -->
-            <div class="lg:flex lg:items-stretch lg:min-h-[70vh] lg:gap-10">
-                <div class="relative w-full h-72 sm:h-80 lg:h-auto lg:w-1/2 lg:flex-shrink-0 overflow-hidden rounded-2xl shadow-sm mb-6 lg:mb-0"
-                     id="landing-carousel" data-testid="landing-carousel">
-                    <!--
-                      Vertical auto-scrolling gallery. To add a picture, add another <img
-                      data-gallery-item ...> to the track below -- that is the only edit
-                      needed. appState.initLandingGallery() clones the whole set once so the
-                      loop is seamless (the track scrolls exactly one set's height, then
-                      restarts), and sizes the scroll speed from how many pictures there are.
-                      Pauses on hover; stands still for prefers-reduced-motion.
-                      The picture list below is placeholder duplication until more photos
-                      are supplied.
-                    -->
-                    <div class="absolute inset-0 landing-gallery-viewport">
-                        <div id="landing-gallery-track" class="landing-gallery-track">
-                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
-                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
-                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item class="landing-gallery-item object-contain bg-white p-4">
-                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
-                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item class="landing-gallery-item object-cover">
-                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item class="landing-gallery-item object-contain bg-white p-4">
+            <div id="landing-hero" data-testid="landing-hero" class="landing-scene landing-scene-hero relative">
+                <div class="lg:flex lg:items-center lg:gap-14 w-full flex-1">
+                    <div class="relative w-full h-72 sm:h-80 lg:h-[min(36rem,calc(100svh-14rem))] lg:w-1/2 lg:flex-shrink-0 overflow-hidden rounded-[1.75rem] mb-8 lg:mb-0"
+                         id="landing-carousel" data-testid="landing-carousel">
+                        <!--
+                          PHOTO WALL. To add a picture, add another <img data-gallery-item ...>
+                          line to the list below -- that is the only edit needed. The wall
+                          (src/lib/landingPhotoWall.js) spreads them over several columns that
+                          drift in opposite directions; clicking a photo opens it large. Add
+                          data-fit="contain" to artwork that must not be cropped. The list is
+                          placeholder duplication until more photos are supplied. Aim for 12+
+                          photos, and resize them to ~900px wide first (the wall loads them all).
+                        -->
+                        <div class="absolute inset-0 landing-gallery-viewport">
+                            <div id="landing-photo-wall" class="photo-wall" role="group" aria-label="ภาพกิจกรรมของโครงการ"></div>
                         </div>
+                        <div id="landing-gallery-source" hidden>
+                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item data-fit="contain">
+                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item>
+                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item data-fit="contain">
+                        </div>
+                        <!-- Frosted blur that ramps in toward the right. No solid colour on purpose: the photos themselves fade to transparent (see .landing-gallery-viewport), so there is no coloured edge to mismatch the page backdrop. -->
+                        <div class="hidden lg:block absolute inset-y-0 right-0 w-[22%] pointer-events-none"
+                             style="-webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px); -webkit-mask-image: linear-gradient(to right, transparent, black 85%); mask-image: linear-gradient(to right, transparent, black 85%);"
+                             aria-hidden="true"></div>
                     </div>
-                    <div class="hidden lg:block absolute inset-y-0 right-0 w-[28%] pointer-events-none"
-                         style="background: linear-gradient(to right, transparent, #fdf7fa); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); -webkit-mask-image: linear-gradient(to right, transparent, black); mask-image: linear-gradient(to right, transparent, black);"
-                         aria-hidden="true"></div>
+
+                    <div class="lg:w-1/2 flex flex-col justify-center text-center lg:text-left">
+                        <p class="hero-rise text-lg md:text-xl font-semibold text-chula mb-1" style="--d:0">Chula Triple S System</p>
+                        <h2 class="hero-rise text-2xl md:text-4xl font-bold text-gray-900 mb-3" style="--d:1">ระบบประเมินผลตอบแทนทางสังคม</h2>
+                        <p class="hero-rise hero-lead mx-auto lg:mx-0" style="--d:2">
+                            ระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย
+
+                            <br><br>เข้าสู่ระบบเพื่อเริ่มต้นกรอกข้อมูล ประเมินผล และออกรายงานฉบับสมบูรณ์
+                        </p>
+                        <div class="hero-rise flex flex-col sm:flex-row gap-3 justify-center lg:justify-start items-stretch" style="--d:3" data-testid="landing-auth-actions">
+                            <button type="button" onclick="appState.login()" data-testid="login-google-btn" class="hero-btn hero-btn-primary group">
+                                <i class="fa-brands fa-google"></i> เข้าสู่ระบบด้วยบัญชีจุฬาฯ
+                                <i class="fa-solid fa-arrow-right text-sm transition-transform duration-300 group-hover:translate-x-1"></i>
+                            </button>
+                            <button type="button" onclick="appState.showView('view-login')" data-testid="login-password-open-btn" class="hero-btn hero-btn-secondary">
+                                <i class="fa-solid fa-envelope"></i> สมาชิก/บุคคลทั่วไป
+                            </button>
+                        </div>
+                        <p class="hero-rise text-sm text-gray-400 mt-4" style="--d:4">
+                            บุคลากรและนิสิตใช้บัญชีจุฬาฯ &middot; สมาชิกภายนอกใช้อีเมลและรหัสผ่านที่ผู้ดูแลระบบออกให้
+                        </p>
+                    </div>
                 </div>
 
-                <div class="lg:w-1/2 flex flex-col justify-center text-center lg:text-left">
-                    <p class="text-lg md:text-xl font-semibold text-chula mb-1">Chula Triple S System</p>
-                    <h2 class="text-2xl md:text-4xl font-bold text-gray-900 mb-3">ระบบประเมินผลตอบแทนทางสังคม</h2>
-                    <p class="text-base md:text-lg text-gray-600 mb-4 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-                        ระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย
-
-                        <br><br>เข้าสู่ระบบเพื่อเริ่มต้นกรอกข้อมูล ประเมินผล และออกรายงานฉบับสมบูรณ์
-                    </p>
-                    <div class="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start items-stretch" data-testid="landing-auth-actions">
-                        <button type="button" onclick="appState.login()" data-testid="login-google-btn"
-                                class="bg-chula hover:bg-chula-dark text-white font-medium py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-base whitespace-nowrap">
-                            <i class="fa-brands fa-google mr-2"></i> เข้าสู่ระบบด้วยบัญชีจุฬาฯ
-                        </button>
-                        <button type="button" onclick="appState.showView('view-login')" data-testid="login-password-open-btn"
-                                class="bg-white hover:bg-gray-50 text-chula-darker font-medium py-3 px-8 rounded-full border-2 border-chula-light shadow-sm transition-all duration-300 transform hover:-translate-y-1 text-base whitespace-nowrap">
-                            <i class="fa-solid fa-envelope mr-2"></i> สมาชิก/บุคคลทั่วไป
-                        </button>
-                    </div>
-                    <p class="text-sm text-gray-400 mt-3">
-                        บุคลากรและนิสิตใช้บัญชีจุฬาฯ &middot; สมาชิกภายนอกใช้อีเมลและรหัสผ่านที่ผู้ดูแลระบบออกให้
-                    </p>
-                </div>
+                <!-- "More below" cue. In normal flow under the content (not overlaid on it, so it can never sit on the gallery). Not rendered at all until the overview exists; fades out once you scroll. -->
+                <button type="button" id="landing-scroll-cue" data-testid="landing-scroll-cue" class="landing-scroll-cue" aria-label="เลื่อนลงเพื่อดูภาพรวมโครงการ">
+                    <span class="cue-label">เลื่อนลงเพื่อดูภาพรวมโครงการ</span>
+                    <span class="cue-mouse" aria-hidden="true"></span>
+                </button>
             </div>
+
+            <!-- Side dots: which scene you're on, and a click-to-jump. Large screens only. -->
+            <nav id="landing-section-nav" data-testid="landing-section-nav" class="landing-nav hidden lg:flex" aria-label="ส่วนต่าง ๆ ของหน้า">
+                <button type="button" data-scene="landing-hero" class="landing-nav-dot is-active" aria-label="หน้าแรก"><span class="landing-nav-label">หน้าแรก</span></button>
+                <button type="button" data-scene="landing-stats" class="landing-nav-dot" aria-label="ภาพรวมโครงการ"><span class="landing-nav-label">ภาพรวมโครงการ</span></button>
+            </nav>
 
             <!--
               Project overview. Hidden until appState.initLandingStats() has real numbers
@@ -185,7 +192,7 @@
               counts only -- see supabase/migrations/0009_public_project_stats.sql.
             -->
             <section id="landing-stats" data-testid="landing-stats"
-                     class="landing-stats hidden relative mt-16 lg:mt-24 overflow-hidden px-5 py-8 sm:px-10 sm:py-12"
+                     class="landing-stats landing-scene hidden relative mt-6 overflow-hidden px-5 py-8 sm:px-10 sm:py-12"
                      aria-labelledby="landing-stats-heading">
                 <div class="stats-blob stats-blob-a" aria-hidden="true"></div>
                 <div class="stats-blob stats-blob-b" aria-hidden="true"></div>

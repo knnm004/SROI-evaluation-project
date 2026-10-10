@@ -458,31 +458,111 @@
   .pdf-page-break { page-break-after: always; }
 }
 
-/* ===== Landing: vertical gallery ================================================== */
-/* The track holds the pictures twice (see appState.initLandingGallery) and scrolls up by
-   exactly half its height -- one full set -- then restarts, so the loop has no seam.
-   Spacing is margin-bottom on each item (not flex gap) precisely so half the track is
-   exactly one set: with gap, the two halves would differ by one gap and the loop would
-   visibly jump. */
+/* ===== Landing: photo wall ======================================================== */
+/* Columns of tiles drift in opposite directions on a slight tilt, so many photos are in
+   view at once. Each track holds its loop twice and moves exactly one loop's height, then
+   restarts -- seamless as long as spacing is margin on each tile (not flex gap), so that
+   half the track is exactly one loop. The wall is oversized and rotated inside a clipped
+   viewport; the scale hides the corners the rotation would otherwise expose. */
 .landing-gallery-viewport {
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 9%, #000 91%, transparent);
-  mask-image: linear-gradient(to bottom, transparent, #000 9%, #000 91%, transparent);
+  /* Two masks intersected: top/bottom fade, and a left-to-right fade that takes the photos
+     to fully transparent at the right edge -- so the wall dissolves into the page backdrop
+     instead of ending in a box edge. The small left fade stops a hard straight cut there. */
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent),
+    linear-gradient(to right, transparent, #000 4%, #000 77%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent),
+    linear-gradient(to right, transparent, #000 4%, #000 77%, transparent 100%);
+  mask-composite: intersect;
 }
-.landing-gallery-track {
-  animation: landing-gallery-scroll var(--gallery-duration, 42s) linear infinite;
+@media (max-width: 1023px) {
+  /* Stacked layout: the wall is a full-width banner, so keep it edge to edge. */
+  .landing-gallery-viewport {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+  }
+}
+.photo-wall {
+  position: absolute;
+  inset: -12% -10%;
+  display: flex;
+  gap: 0.9rem;
+  transform: rotate(-5deg);
+}
+.photo-col { flex: 1 1 0; min-width: 0; overflow: visible; }
+.photo-track {
+  animation: photo-drift var(--drift-duration, 60s) linear var(--drift-delay, 0s) infinite;
   will-change: transform;
 }
-.landing-gallery-item {
-  display: block;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  margin-bottom: 1rem;
-  border-radius: 1rem;
-}
-#landing-carousel:hover .landing-gallery-track { animation-play-state: paused; }
-@keyframes landing-gallery-scroll {
+.photo-track.is-down { animation-direction: reverse; }
+.photo-wall:hover .photo-track { animation-play-state: paused; }
+@keyframes photo-drift {
   from { transform: translateY(0); }
   to   { transform: translateY(-50%); }
+}
+.photo-tile {
+  display: block;
+  position: relative;
+  width: 100%;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: #f3e7ec;
+  cursor: zoom-in;
+  box-shadow: 0 14px 28px -18px rgba(31, 41, 55, 0.5);
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.45s ease;
+}
+.photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-tile img.is-contain { object-fit: contain; background: #fff; padding: 0.75rem; }
+.photo-tile:hover { transform: scale(1.04); box-shadow: 0 24px 40px -16px rgba(218, 95, 142, 0.7); z-index: 2; }
+.photo-tile:focus-visible { outline: 3px solid #DA5F8E; outline-offset: -3px; }
+
+/* Lightbox (click a photo) */
+.photo-lightbox {
+  width: min(94vw, 64rem);
+  max-height: 92vh;
+  padding: 0;
+  border: 0;
+  border-radius: 1.25rem;
+  background: #0b0f1f;
+  overflow: hidden;
+}
+.photo-lightbox::backdrop { background: rgba(11, 15, 31, 0.78); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.photo-lightbox-img { display: block; width: 100%; max-height: 92vh; object-fit: contain; }
+.photo-lightbox-btn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 9999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.photo-lightbox-btn:hover { background: rgba(255, 255, 255, 0.3); }
+.photo-lightbox-btn.is-close { top: 0.9rem; right: 0.9rem; }
+.photo-lightbox-btn.is-prev { left: 0.9rem; top: 50%; margin-top: -1.4rem; }
+.photo-lightbox-btn.is-next { right: 0.9rem; top: 50%; margin-top: -1.4rem; }
+.photo-lightbox-count {
+  position: absolute;
+  left: 50%;
+  bottom: 0.9rem;
+  transform: translateX(-50%);
+  padding: 0.2rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 9999px;
 }
 
 /* ===== Landing: project overview ================================================= */
@@ -857,7 +937,7 @@
 .stats-note { margin-top: 1rem; font-size: 0.75rem; color: #9ca3af; }
 
 @media (prefers-reduced-motion: reduce) {
-  .landing-gallery-track,
+  .photo-track,
   .stats-blob,
   .stats-inline-pill,
   .landing-stats.is-visible .rail-card { animation: none; }
@@ -882,4 +962,172 @@ body.landing-bg {
     radial-gradient(46rem 32rem at -6% 108%, rgba(248, 180, 196, 0.50), transparent 62%),
     linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(218, 95, 142, 0.05) 100%);
   background-attachment: fixed;
+}
+
+/* ===== Landing: scenes, hero polish, scroll cue ===================================== */
+/* Each scene is a screen-sized snap stop. Snapping is `proximity` (not mandatory) so it
+   never traps a user mid-scroll, and is only switched on (html.landing-snap) once the
+   second scene exists. 5rem = sticky header (4.25rem) + a little breathing room. */
+html.landing-snap:has(body.landing-bg) {
+  scroll-snap-type: y proximity;
+  scroll-padding-top: 5rem;
+}
+.landing-scene { scroll-snap-align: start; }
+.landing-scene-hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Leaves a strip of the next scene peeking in at the bottom -- the first hint there's more. */
+  min-height: calc(100svh - 4.25rem - 1.5rem - 4.5rem);
+}
+.landing-stats:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100svh - 5rem - 1.5rem);
+}
+
+/* Hero copy: staggered rise on load. Applied to wrappers, never to the buttons themselves --
+   an animation that holds its end state (`both`) would override their hover transform. */
+.hero-rise { animation: hero-rise 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--d, 0) * 110ms); }
+@keyframes hero-rise { from { opacity: 0; transform: translateY(1.25rem); } }
+
+.hero-lead {
+  max-width: 36rem;
+  margin-bottom: 1.75rem;
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  line-height: 1.85;
+  color: #4b5563;
+}
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.95rem 1.9rem;
+  border-radius: 9999px;
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+}
+.hero-btn:hover { transform: translateY(-3px); }
+.hero-btn:focus-visible { outline: 3px solid #DA5F8E; outline-offset: 3px; }
+.hero-btn-primary {
+  color: #fff;
+  background: linear-gradient(135deg, #DA5F8E, #c94d5a);
+  box-shadow: 0 16px 32px -14px rgba(201, 77, 90, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.hero-btn-primary:hover { box-shadow: 0 24px 40px -14px rgba(201, 77, 90, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.hero-btn-secondary {
+  color: #c94d5a;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1.5px solid #f8b4c4;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.hero-btn-secondary:hover { background: #fff; border-color: #DA5F8E; }
+
+/* "Scroll for more" cue: a quiet label over a small wheel icon, centred under the hero.
+   display:none until ready so a hero with nothing below doesn't keep an empty gap. */
+.landing-scroll-cue {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  align-self: center;
+  margin-top: 1.75rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #b8506a;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: opacity 0.5s ease, color 0.2s ease;
+}
+.landing-scroll-cue.is-ready { display: flex; animation: cue-in 0.8s ease 0.6s backwards; }
+.landing-scroll-cue.is-ready:hover { color: #DA5F8E; }
+/* Faded, not removed, once scrolled -- removing it would shift the page under the reader. */
+.landing-scroll-cue.is-gone { opacity: 0; pointer-events: none; }
+@keyframes cue-in { from { opacity: 0; transform: translateY(0.5rem); } }
+.cue-mouse {
+  position: relative;
+  width: 1.3rem;
+  height: 2.1rem;
+  border: 2px solid currentColor;
+  border-radius: 9999px;
+}
+.cue-mouse::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0.4rem;
+  width: 0.24rem;
+  height: 0.45rem;
+  margin-left: -0.12rem;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: cue-wheel 1.9s ease-in-out infinite;
+}
+@keyframes cue-wheel {
+  0%   { opacity: 0; transform: translateY(0); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(0.8rem); }
+}
+
+/* Side dots */
+.landing-nav {
+  position: fixed;
+  right: 1.25rem;
+  top: 50%;
+  z-index: 40;
+  flex-direction: column;
+  gap: 0.9rem;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+.landing-nav.is-ready { opacity: 1; pointer-events: auto; }
+.landing-nav-dot {
+  position: relative;
+  width: 0.7rem;
+  height: 0.7rem;
+  padding: 0;
+  border-radius: 9999px;
+  background: transparent;
+  border: 2px solid #DA5F8E;
+  cursor: pointer;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s ease;
+}
+.landing-nav-dot:hover { transform: scale(1.35); }
+.landing-nav-dot.is-active { background: #DA5F8E; transform: scale(1.35); }
+.landing-nav-label {
+  position: absolute;
+  right: 1.5rem;
+  top: 50%;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #fff;
+  background: #c94d5a;
+  border-radius: 9999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(0.4rem, -50%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.landing-nav-dot:hover .landing-nav-label,
+.landing-nav-dot:focus-visible .landing-nav-label { opacity: 1; transform: translate(0, -50%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise,
+  .landing-scroll-cue.is-ready,
+  .cue-mouse::after { animation: none; }
+  .hero-btn,
+  .photo-tile,
+  .landing-nav-dot { transition: none; }
 }
