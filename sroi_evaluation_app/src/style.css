@@ -967,10 +967,10 @@ body.landing-bg {
 /* ===== Landing: scenes, hero polish, scroll cue ===================================== */
 /* Each scene is a screen-sized snap stop. Snapping is `proximity` (not mandatory) so it
    never traps a user mid-scroll, and is only switched on (html.landing-snap) once the
-   second scene exists. 5rem = sticky header (4.25rem) + a little breathing room. */
+   second scene exists. --site-header-h = the sticky header (h-20 = 5rem, plus its 4px border) + a little breathing room. */
 html.landing-snap:has(body.landing-bg) {
   scroll-snap-type: y proximity;
-  scroll-padding-top: 5rem;
+  scroll-padding-top: calc(var(--site-header-h) + 0.75rem);
 }
 .landing-scene { scroll-snap-align: start; }
 .landing-scene-hero {
@@ -978,13 +978,13 @@ html.landing-snap:has(body.landing-bg) {
   flex-direction: column;
   justify-content: center;
   /* Leaves a strip of the next scene peeking in at the bottom -- the first hint there's more. */
-  min-height: calc(100svh - 4.25rem - 1.5rem - 4.5rem);
+  min-height: calc(100svh - var(--site-header-h) - 1.5rem - 4.5rem);
 }
 .landing-stats:not(.hidden) {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: calc(100svh - 5rem - 1.5rem);
+  min-height: calc(100svh - var(--site-header-h) - 0.75rem - 1.5rem);
 }
 
 /* Hero copy: staggered rise on load. Applied to wrappers, never to the buttons themselves --
@@ -1173,3 +1173,8 @@ body.login-bg::after {
     rgba(253, 247, 250, 0.44) 100%);
   pointer-events: none;
 }
+
+/* Height of the sticky top bar (h-16 / sm:h-20, plus its 4px bottom border). The landing scenes'
+   snap offset and heights are measured from it -- change the header, change this. */
+:root { --site-header-h: 4.25rem; }            /* h-16 + border: phones keep the compact bar */
+@media (min-width: 640px) { :root { --site-header-h: 5.25rem; } }  /* sm:h-20 + border */
