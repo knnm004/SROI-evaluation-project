@@ -17,6 +17,7 @@ import {
     isSROIRowStarted
 } from './lib/assessmentSnapshot.js';
 import { initLandingStats } from './lib/landingStats.js';
+import { evaluateCompleteness, STEP_LABELS } from './lib/completeness.js';
 import { initLandingSections } from './lib/landingSections.js';
 import { initLandingPhotoWall } from './lib/landingPhotoWall.js';
 
@@ -303,6 +304,8 @@ export const appState = {
     uploadedImage: null,
     activityImages: [],
     isViewMode: false,
+    /** The switch in the recheck modal, as last saved: true/false, or null = never asked. */
+    declaredComplete: null,
     // Has the user actually changed anything THIS session, as opposed to just having
     // opened a project or clicked "Edit"? Drives whether goHome() bothers them with the
     // "saved as a draft" confirm -- reset wherever a session starts clean (new project,
@@ -778,6 +781,7 @@ export const appState = {
         this.activityImages = [];
         this.sroiRows = [];
         this.isViewMode = false;
+        this.declaredComplete = null;
 
         document.querySelectorAll('input, textarea').forEach(el => {
             if (el.type !== 'file') {
@@ -3496,6 +3500,11 @@ export const appState = {
         // step 5 (buildProjectPayload() below reads currentStep at call time).
         this.currentStep = this.totalSteps;
 
+        // What the person ticked on the recheck screen is what gets stored -- read now,
+        // before buildProjectPayload() below serialises it into the snapshot.
+        const completionSwitch = document.getElementById('completion-switch');
+        if (completionSwitch) this.declaredComplete = completionSwitch.checked;
+
         // Read the draft key BEFORE saving. For a first save saveProjectData() calls
         // history.replaceState() to put ?id=<newId> in the URL, which changes what
         // getDraftKey() returns -- clearing it afterwards would delete a key that never
@@ -3539,7 +3548,89 @@ export const appState = {
         if (!reportContainer || !modalContent || !modal) return;
 
         modalContent.innerHTML = reportContainer.innerHTML;
+        this.renderCompletionBar();
         modal.classList.remove('hidden');
+    },
+
+    /**
+     * The "filled in completely?" switch on the recheck screen. The system checks every
+     * field (see lib/completeness.js) and PRE-SETS the switch to what it found, but the
+     * person decides: they can mark a project complete with gaps (e.g. a field that does
+     * not apply to them) or leave it unfinished. Whatever they choose is what the
+     * dashboard card shows.
+     */
+    renderCompletionBar() {
+        const toggle = document.getElementById('completion-switch');
+        if (!toggle) return;
+
+        this.completionCheck = evaluateCompleteness(serialiseAssessment(this));
+        toggle.checked = this.completionCheck.complete;
+        this.updateCompletionBar();
+    },
+
+    /** Re-draws the explanation under the switch; runs on open and on every flip. */
+    updateCompletionBar() {
+        const toggle = document.getElementById('completion-switch');
+        const stateText = document.getElementById('completion-state-text');
+        const detail = document.getElementById('completion-detail');
+        const check = this.completionCheck;
+        if (!toggle || !stateText || !detail || !check) return;
+
+        const gaps = check.missing.length;
+        const declaredComplete = toggle.checked;
+
+        stateText.textContent = declaredComplete
+            ? 'โครงการนี้จะแสดงเป็น "กรอกครบแล้ว"'
+            : 'โครงการนี้จะแสดงเป็น "ยังกรอกไม่ครบ" — กลับมาแก้ไขต่อได้ภายหลัง';
+        stateText.className = 'block text-sm ' + (declaredComplete ? 'text-green-700' : 'text-amber-700');
+
+        const note = (tone, icon, text) =>
+            `<p class="${tone}"><i class="fa-solid ${icon} mr-1.5"></i>${escapeHTML(text)}</p>`;
+
+        let html = '';
+        if (gaps === 0) {
+            html += note('text-green-700', 'fa-circle-check',
+                `ระบบตรวจแล้ว: กรอกครบทุกรายการ (${check.filled}/${check.total})`);
+            if (!declaredComplete) {
+                html += note('text-gray-500 mt-1', 'fa-circle-info',
+                    'ข้อมูลครบทุกช่องแล้ว — เปิดสวิตช์หากต้องการแสดงว่ากรอกครบ');
+            }
+        } else {
+            html += note('text-amber-700', 'fa-triangle-exclamation',
+                `ระบบพบว่ายังว่าง ${gaps} จาก ${check.total} รายการ`);
+            if (declaredComplete) {
+                html += note('text-red-600 mt-1', 'fa-circle-exclamation',
+                    'คุณกำลังระบุว่ากรอกครบ ทั้งที่ยังมีช่องว่าง — ยืนยันได้ แต่โปรดตรวจสอบอีกครั้ง');
+            }
+
+            // Grouped by step, each with a shortcut back to fix it.
+            const byStep = new Map();
+            check.missing.forEach(({ step, label }) => {
+                if (!byStep.has(step)) byStep.set(step, []);
+                byStep.get(step).push(label);
+            });
+            html += '<div class="mt-2 max-h-36 overflow-y-auto pr-1 space-y-2" data-testid="completion-missing">';
+            byStep.forEach((labels, step) => {
+                html += `<div>
+                    <button type="button" onclick="appState.jumpToStepFromRecheck(${step})"
+                            class="font-semibold text-chula-darker hover:underline text-left">
+                        ขั้นตอน ${step}: ${escapeHTML(STEP_LABELS[step] ?? '')}
+                        <i class="fa-solid fa-arrow-up-right-from-square text-xs ml-1"></i>
+                    </button>
+                    <ul class="list-disc list-inside text-gray-600">
+                        ${labels.map(label => `<li>${escapeHTML(label)}</li>`).join('')}
+                    </ul>
+                </div>`;
+            });
+            html += '</div>';
+        }
+        detail.innerHTML = html;
+    },
+
+    /** From the recheck list: close the modal and land on the step that has the gap. */
+    jumpToStepFromRecheck(step) {
+        this.hideRecheckModal();
+        this.goToStep(step);
     },
 
     hideRecheckModal() {

@@ -5,6 +5,7 @@ import { escapeHTML, formatThaiDate, formatUpdatedMeta } from './lib/format.js';
 import { loadIdentity, signOut } from './lib/session.js';
 import { isAdmin, canDeleteProject } from './lib/permissions.js';
 import { normaliseSnapshot, hasMeaningfulContent } from './lib/assessmentSnapshot.js';
+import { evaluateCompleteness } from './lib/completeness.js';
 
 // Same key app.js's getDraftKey() uses for a never-saved project (id-less URL).
 const NEW_PROJECT_DRAFT_KEY = 'sroi-evaluation-draft-new';
@@ -114,6 +115,46 @@ function openProject(projectId) {
     cancelBtn.onclick = () => { modal.classList.add('hidden'); };
 }
 
+/**
+ * Done-or-not for one project card.
+ *
+ * The person's own answer wins: at the recheck-and-save screen they are asked whether the
+ * project is filled in completely, and that is stored in the snapshot. Projects saved before
+ * that switch existed have no answer, so for those the same field check the save screen runs
+ * (lib/completeness.js) is used instead -- flagged as automatic in the tooltip so it is clear
+ * nobody confirmed it.
+ *
+ * @returns {{complete: boolean, source: 'declared'|'auto', gaps: number}}
+ */
+function completionOf(project) {
+    const snapshot = normaliseSnapshot(project.assessment_data);
+    const declared = snapshot?.completion?.declaredComplete;
+    const check = evaluateCompleteness(snapshot);
+
+    if (typeof declared === 'boolean') {
+        return { complete: declared, source: 'declared', gaps: check.missing.length };
+    }
+    return { complete: check.complete, source: 'auto', gaps: check.missing.length };
+}
+
+function completionBadge(project) {
+    const { complete, source, gaps } = completionOf(project);
+
+    const tip = complete
+        ? (source === 'declared' ? 'ผู้บันทึกข้อมูลยืนยันว่ากรอกข้อมูลครบแล้ว' : 'ระบบตรวจพบว่ากรอกข้อมูลครบทุกรายการ')
+        : (source === 'declared'
+            ? 'ยังกรอกไม่ครบ — กลับมาแก้ไขต่อได้'
+            : `ระบบตรวจพบว่ายังว่าง ${gaps} รายการ`);
+
+    return complete
+        ? `<div class="bg-green-50 text-green-700 text-xs font-bold px-3 py-1 rounded-full" title="${escapeHTML(tip)}" data-testid="project-card-completion" data-complete="true">
+               <i class="fa-solid fa-circle-check mr-1"></i>กรอกครบแล้ว
+           </div>`
+        : `<div class="bg-amber-50 text-amber-700 text-xs font-bold px-3 py-1 rounded-full" title="${escapeHTML(tip)}" data-testid="project-card-completion" data-complete="false">
+               <i class="fa-solid fa-pen-to-square mr-1"></i>ยังกรอกไม่ครบ
+           </div>`;
+}
+
 async function fetchProjects() {
     const container = document.getElementById('projects-container');
 
@@ -168,7 +209,10 @@ async function fetchProjects() {
         card.innerHTML = `
             <div class="flex-grow cursor-pointer project-open-trigger">
                 <div class="flex items-start justify-between mb-3 pr-8 gap-2 flex-wrap">
-                    ${badge}
+                    <div class="flex items-center gap-2 flex-wrap">
+                        ${badge}
+                        ${completionBadge(project)}
+                    </div>
                     ${teamCount > 0
                         ? `<div class="text-xs text-gray-500 font-medium" data-testid="project-card-team">
                                <i class="fa-solid fa-user-group mr-1"></i>${teamCount} ผู้ร่วมวิจัย

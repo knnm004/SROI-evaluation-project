@@ -922,6 +922,30 @@
                     </button>
                 </div>
                 <div class="p-6 overflow-y-auto flex-grow bg-white" id="modal-report-content"></div>
+
+                <!--
+                  Completion status. The system pre-sets the switch from what it finds
+                  (appState.renderCompletionBar), but the person has the final say -- what they
+                  leave it on is what the dashboard card shows. Pinned between the scrolling
+                  report and the buttons so it is always in view when confirming.
+                -->
+                <div id="completion-bar" data-testid="completion-bar" class="px-6 py-4 border-t border-gray-200 bg-white">
+                    <div class="flex items-start gap-5 flex-wrap">
+                        <label class="inline-flex items-center gap-3 cursor-pointer select-none shrink-0">
+                            <span class="relative inline-block">
+                                <input type="checkbox" id="completion-switch" data-testid="completion-switch"
+                                       class="peer sr-only" onchange="appState.updateCompletionBar()">
+                                <span class="block w-14 h-8 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 peer-focus-visible:ring-4 peer-focus-visible:ring-green-200"></span>
+                                <span class="absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow transition-transform peer-checked:translate-x-6"></span>
+                            </span>
+                            <span>
+                                <span class="block font-bold text-gray-900">กรอกข้อมูลครบถ้วนแล้ว</span>
+                                <span id="completion-state-text" class="block text-sm text-gray-500"></span>
+                            </span>
+                        </label>
+                        <div id="completion-detail" class="flex-1 min-w-[16rem] text-sm" aria-live="polite"></div>
+                    </div>
+                </div>
                 <div class="p-5 border-t border-gray-200 bg-gray-50 flex justify-end gap-4 rounded-b-2xl">
                     <button type="button" onclick="appState.hideRecheckModal()" class="px-6 py-2.5 border border-gray-300 text-gray-700 bg-white rounded-xl hover:bg-gray-50 font-semibold shadow-sm transition-colors">
                         กลับไปแก้ไข
