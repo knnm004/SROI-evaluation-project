@@ -15,29 +15,29 @@
 
     <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
+            <div class="flex justify-between items-center h-16 md:h-20">
                 <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='/dashboard.html'">
-                    <img src="/images/chula-logo.png" alt="Chulalongkorn University" class="h-11 w-auto shrink-0 object-contain">
+                    <img src="/images/chula-logo.png" alt="Chulalongkorn University" class="h-11 md:h-14 w-auto shrink-0 object-contain">
                     <div class="flex items-center gap-2 min-w-0">
                         <div class="flex flex-col min-w-0 leading-tight">
-                            <h1 class="text-base font-bold text-gray-900 whitespace-nowrap">ระบบประเมินผลตอบแทนทางสังคม</h1>
-                            <span class="text-xs text-gray-500 font-medium whitespace-nowrap">Chula Triple S System</span>
+                            <h1 class="text-base md:text-xl font-bold text-gray-900 whitespace-nowrap">ระบบประเมินผลตอบแทนทางสังคม</h1>
+                            <span class="text-xs md:text-sm text-gray-500 font-medium whitespace-nowrap">Chula Triple S System</span>
                         </div>
-                        <span class="hidden sm:block w-px h-8 bg-gray-300 shrink-0" aria-hidden="true"></span>
-                        <span class="text-xs font-semibold text-chula-darker bg-chula bg-opacity-10 px-2 py-0.5 rounded-full whitespace-nowrap">จัดการระบบ (Administration)</span>
+                        <span class="hidden sm:block w-px h-8 md:h-10 bg-gray-300 shrink-0" aria-hidden="true"></span>
+                        <span class="text-xs md:text-sm font-semibold text-chula-darker bg-chula bg-opacity-10 px-2 py-0.5 rounded-full whitespace-nowrap">จัดการระบบ (Administration)</span>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
                     <a href="/dashboard.html" data-testid="admin-back-link"
-                       class="mr-3 text-sm font-semibold text-chula-darker hover:underline">
+                       class="mr-3 text-sm md:text-base font-semibold text-chula-darker hover:underline">
                         <i class="fa-solid fa-arrow-left mr-1"></i>กลับหน้าโครงการ
                     </a>
-                    <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
+                    <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
                         <i class="fa-solid fa-shield-halved"></i>
                     </div>
-                    <span class="text-sm font-medium" id="admin-email" data-testid="admin-email">Loading...</span>
+                    <span class="text-sm md:text-base font-medium" id="admin-email" data-testid="admin-email">Loading...</span>
                     <button id="logout-btn" data-testid="logout-btn"
-                            class="ml-4 text-sm text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
+                            class="ml-4 text-sm md:text-base text-red-500 hover:text-red-700 hover:underline">ออกจากระบบ</button>
                 </div>
             </div>
         </div>

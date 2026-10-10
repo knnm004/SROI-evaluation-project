@@ -16,6 +16,10 @@ import {
     buildProjectPayload,
     isSROIRowStarted
 } from './lib/assessmentSnapshot.js';
+import { initLandingStats } from './lib/landingStats.js';
+import { evaluateCompleteness, STEP_LABELS } from './lib/completeness.js';
+import { initLandingSections } from './lib/landingSections.js';
+import { initLandingPhotoWall } from './lib/landingPhotoWall.js';
 
 // Helper to scope draft keys per project ID so projects don't bleed into each other
 function getDraftKey() {
@@ -270,25 +274,27 @@ const MAX_SUPPORT_YEAR_BE = 2700;
  * category is the dropdown option; `focus` is the IRIS+-style sub-category list,
  * shown as a read-only hint under the dropdown rather than as separate options
  * (per request: only the main category is selectable).
+ * `icon` (a Font Awesome class) and `tone` (a hex colour) are used only by the landing
+ * page's project-overview cards (src/lib/landingStats.js).
  */
 const PROJECT_CATEGORIES = [
-    { title: "เกษตรกรรม", focus: "เกษตรกรรมรายย่อย, เกษตรกรรมยั่งยืน" },
-    { title: "คุณภาพอากาศ", focus: "อากาศสะอาด" },
-    { title: "ความหลากหลายทางชีวภาพและระบบนิเวศ", focus: "การอนุรักษ์ความหลากหลายทางชีวภาพและระบบนิเวศ" },
-    { title: "การเปลี่ยนแปลงสภาพภูมิอากาศ", focus: "การลดผลกระทบจากการเปลี่ยนแปลงสภาพภูมิอากาศ, การปรับตัวและความยืดหยุ่นต่อสภาพภูมิอากาศ" },
-    { title: "ความหลากหลายและการยอมรับความแตกต่าง", focus: "มิติทางเพศ, ความเท่าเทียมทางเชื้อชาติ" },
-    { title: "การศึกษา", focus: "การเข้าถึงการศึกษาที่มีคุณภาพ" },
-    { title: "การจ้างงาน", focus: "งานที่มีคุณภาพ" },
-    { title: "พลังงาน", focus: "พลังงานสะอาด, การเข้าถึงพลังงาน, ประสิทธิภาพพลังงาน" },
-    { title: "บริการทางการเงิน", focus: "การเข้าถึงบริการทางการเงิน" },
-    { title: "สุขภาพ", focus: "การเข้าถึงบริการสุขภาพที่มีคุณภาพ" },
-    { title: "โครงสร้างพื้นฐาน", focus: "โครงสร้างพื้นฐานที่ยืดหยุ่นต่อการเปลี่ยนแปลง" },
-    { title: "ทรัพยากรผืนดินและป่าไม้", focus: "การอนุรักษ์ทรัพยากรธรรมชาติ, การจัดการที่ดินอย่างยั่งยืน, การป่าไม้อย่างยั่งยืน" },
-    { title: "ทะเลและเขตชายฝั่ง", focus: "การอนุรักษ์และจัดการทรัพยากรทางทะเล" },
-    { title: "มลพิษ", focus: "การป้องกันมลพิษ" },
-    { title: "ที่อยู่อาศัย", focus: "ที่อยู่อาศัยคุณภาพในราคาที่เข้าถึงได้, อาคารสีเขียว" },
-    { title: "ขยะและของเสีย", focus: "การจัดการของเสีย" },
-    { title: "ทรัพยากรน้ำ", focus: "การจัดการน้ำอย่างยั่งยืน, น้ำ สุขาภิบาล และสุขอนามัย" }
+    { title: "เกษตรกรรม", icon: "fa-wheat-awn", tone: "#d97706", focus: "เกษตรกรรมรายย่อย, เกษตรกรรมยั่งยืน" },
+    { title: "คุณภาพอากาศ", icon: "fa-wind", tone: "#0ea5e9", focus: "อากาศสะอาด" },
+    { title: "ความหลากหลายทางชีวภาพและระบบนิเวศ", icon: "fa-seedling", tone: "#16a34a", focus: "การอนุรักษ์ความหลากหลายทางชีวภาพและระบบนิเวศ" },
+    { title: "การเปลี่ยนแปลงสภาพภูมิอากาศ", icon: "fa-temperature-high", tone: "#ea580c", focus: "การลดผลกระทบจากการเปลี่ยนแปลงสภาพภูมิอากาศ, การปรับตัวและความยืดหยุ่นต่อสภาพภูมิอากาศ" },
+    { title: "ความหลากหลายและการยอมรับความแตกต่าง", icon: "fa-people-group", tone: "#7c3aed", focus: "มิติทางเพศ, ความเท่าเทียมทางเชื้อชาติ" },
+    { title: "การศึกษา", icon: "fa-graduation-cap", tone: "#4f46e5", focus: "การเข้าถึงการศึกษาที่มีคุณภาพ" },
+    { title: "การจ้างงาน", icon: "fa-briefcase", tone: "#2563eb", focus: "งานที่มีคุณภาพ" },
+    { title: "พลังงาน", icon: "fa-bolt", tone: "#ca8a04", focus: "พลังงานสะอาด, การเข้าถึงพลังงาน, ประสิทธิภาพพลังงาน" },
+    { title: "บริการทางการเงิน", icon: "fa-coins", tone: "#059669", focus: "การเข้าถึงบริการทางการเงิน" },
+    { title: "สุขภาพ", icon: "fa-stethoscope", tone: "#0d9488", focus: "การเข้าถึงบริการสุขภาพที่มีคุณภาพ" },
+    { title: "โครงสร้างพื้นฐาน", icon: "fa-bridge", tone: "#64748b", focus: "โครงสร้างพื้นฐานที่ยืดหยุ่นต่อการเปลี่ยนแปลง" },
+    { title: "ทรัพยากรผืนดินและป่าไม้", icon: "fa-mountain-sun", tone: "#92400e", focus: "การอนุรักษ์ทรัพยากรธรรมชาติ, การจัดการที่ดินอย่างยั่งยืน, การป่าไม้อย่างยั่งยืน" },
+    { title: "ทะเลและเขตชายฝั่ง", icon: "fa-water", tone: "#0369a1", focus: "การอนุรักษ์และจัดการทรัพยากรทางทะเล" },
+    { title: "มลพิษ", icon: "fa-smog", tone: "#6b7280", focus: "การป้องกันมลพิษ" },
+    { title: "ที่อยู่อาศัย", icon: "fa-house", tone: "#e11d48", focus: "ที่อยู่อาศัยคุณภาพในราคาที่เข้าถึงได้, อาคารสีเขียว" },
+    { title: "ขยะและของเสีย", icon: "fa-recycle", tone: "#65a30d", focus: "การจัดการของเสีย" },
+    { title: "ทรัพยากรน้ำ", icon: "fa-droplet", tone: "#0891b2", focus: "การจัดการน้ำอย่างยั่งยืน, น้ำ สุขาภิบาล และสุขอนามัย" }
 ];
 
 export const appState = {
@@ -298,6 +304,8 @@ export const appState = {
     uploadedImage: null,
     activityImages: [],
     isViewMode: false,
+    /** The switch in the recheck modal, as last saved: true/false, or null = never asked. */
+    declaredComplete: null,
     // Has the user actually changed anything THIS session, as opposed to just having
     // opened a project or clicked "Edit"? Drives whether goHome() bothers them with the
     // "saved as a draft" confirm -- reset wherever a session starts clean (new project,
@@ -658,45 +666,40 @@ export const appState = {
         document.getElementById(viewId).classList.remove('hidden');
         this.currentView = viewId;
 
-        if (viewId === 'view-landing') this.initLandingCarousel();
+        // Each screen owns its backdrop: the pink-framed one for the landing page, the
+        // Chula photo for member sign-in, and the plain background for the data-entry steps
+        // so forms stay easy on the eyes.
+        document.body.classList.toggle('landing-bg', viewId === 'view-landing');
+        document.body.classList.toggle('login-bg', viewId === 'view-login');
+
+        if (viewId === 'view-landing') {
+            this.preloadLoginBackground();
+            this.initLandingGallery();
+            initLandingSections();
+            this.initLandingStats();
+        }
     },
 
-    carouselTimer: null,
+    // Warm the sign-in photo while the visitor is still reading the landing page, so it is
+    // already cached when they click login instead of popping in over a blank backdrop.
+    preloadLoginBackground() {
+        if (this.loginBackgroundPreloaded) return;
+        this.loginBackgroundPreloaded = true;
+        const load = () => { new Image().src = '/images/background_1.webp'; };
+        if ('requestIdleCallback' in window) window.requestIdleCallback(load);
+        else window.setTimeout(load, 1500);
+    },
 
-    // Landing page's rotating banner. Guarded by carouselTimer so re-entering
-    // view-landing (e.g. "กลับหน้าหลัก" from the member sign-in form) doesn't stack
-    // a second interval on top of the first, doubling the rotation speed.
-    initLandingCarousel() {
-        const slides = document.querySelectorAll('#landing-carousel [data-carousel-slide]');
-        const dotsContainer = document.getElementById('landing-carousel-dots');
-        if (!slides.length || !dotsContainer) return;
+    // Landing page's photo wall; see src/lib/landingPhotoWall.js (idempotent).
+    initLandingGallery() {
+        initLandingPhotoWall();
+    },
 
-        if (this.carouselTimer) return; // already running
-
-        let active = 0;
-        const dots = slides.length > 1
-            ? Array.from(slides).map((_, index) => {
-                const dot = document.createElement('button');
-                dot.type = 'button';
-                dot.setAttribute('aria-label', `Slide ${index + 1}`);
-                dot.className = 'w-2 h-2 rounded-full transition-colors ' + (index === 0 ? 'bg-white' : 'bg-white/50');
-                dot.onclick = () => showSlide(index);
-                dotsContainer.appendChild(dot);
-                return dot;
-            })
-            : [];
-
-        const showSlide = (index) => {
-            slides[active].classList.replace('opacity-100', 'opacity-0');
-            dots[active]?.classList.replace('bg-white', 'bg-white/50');
-            active = index;
-            slides[active].classList.replace('opacity-0', 'opacity-100');
-            dots[active]?.classList.replace('bg-white/50', 'bg-white');
-        };
-
-        this.carouselTimer = window.setInterval(() => {
-            showSlide((active + 1) % slides.length);
-        }, 4000);
+    initLandingStats() {
+        initLandingStats({
+            sdgs: SDGs_LIST,
+            categories: PROJECT_CATEGORIES
+        });
     },
 
     async login() {
@@ -778,6 +781,7 @@ export const appState = {
         this.activityImages = [];
         this.sroiRows = [];
         this.isViewMode = false;
+        this.declaredComplete = null;
 
         document.querySelectorAll('input, textarea').forEach(el => {
             if (el.type !== 'file') {
@@ -3496,6 +3500,11 @@ export const appState = {
         // step 5 (buildProjectPayload() below reads currentStep at call time).
         this.currentStep = this.totalSteps;
 
+        // What the person ticked on the recheck screen is what gets stored -- read now,
+        // before buildProjectPayload() below serialises it into the snapshot.
+        const completionSwitch = document.getElementById('completion-switch');
+        if (completionSwitch) this.declaredComplete = completionSwitch.checked;
+
         // Read the draft key BEFORE saving. For a first save saveProjectData() calls
         // history.replaceState() to put ?id=<newId> in the URL, which changes what
         // getDraftKey() returns -- clearing it afterwards would delete a key that never
@@ -3539,7 +3548,89 @@ export const appState = {
         if (!reportContainer || !modalContent || !modal) return;
 
         modalContent.innerHTML = reportContainer.innerHTML;
+        this.renderCompletionBar();
         modal.classList.remove('hidden');
+    },
+
+    /**
+     * The "filled in completely?" switch on the recheck screen. The system checks every
+     * field (see lib/completeness.js) and PRE-SETS the switch to what it found, but the
+     * person decides: they can mark a project complete with gaps (e.g. a field that does
+     * not apply to them) or leave it unfinished. Whatever they choose is what the
+     * dashboard card shows.
+     */
+    renderCompletionBar() {
+        const toggle = document.getElementById('completion-switch');
+        if (!toggle) return;
+
+        this.completionCheck = evaluateCompleteness(serialiseAssessment(this));
+        toggle.checked = this.completionCheck.complete;
+        this.updateCompletionBar();
+    },
+
+    /** Re-draws the explanation under the switch; runs on open and on every flip. */
+    updateCompletionBar() {
+        const toggle = document.getElementById('completion-switch');
+        const stateText = document.getElementById('completion-state-text');
+        const detail = document.getElementById('completion-detail');
+        const check = this.completionCheck;
+        if (!toggle || !stateText || !detail || !check) return;
+
+        const gaps = check.missing.length;
+        const declaredComplete = toggle.checked;
+
+        stateText.textContent = declaredComplete
+            ? 'โครงการนี้จะแสดงเป็น "กรอกครบแล้ว"'
+            : 'โครงการนี้จะแสดงเป็น "ยังกรอกไม่ครบ" — กลับมาแก้ไขต่อได้ภายหลัง';
+        stateText.className = 'block text-sm ' + (declaredComplete ? 'text-green-700' : 'text-amber-700');
+
+        const note = (tone, icon, text) =>
+            `<p class="${tone}"><i class="fa-solid ${icon} mr-1.5"></i>${escapeHTML(text)}</p>`;
+
+        let html = '';
+        if (gaps === 0) {
+            html += note('text-green-700', 'fa-circle-check',
+                `ระบบตรวจแล้ว: กรอกครบทุกรายการ (${check.filled}/${check.total})`);
+            if (!declaredComplete) {
+                html += note('text-gray-500 mt-1', 'fa-circle-info',
+                    'ข้อมูลครบทุกช่องแล้ว — เปิดสวิตช์หากต้องการแสดงว่ากรอกครบ');
+            }
+        } else {
+            html += note('text-amber-700', 'fa-triangle-exclamation',
+                `ระบบพบว่ายังว่าง ${gaps} จาก ${check.total} รายการ`);
+            if (declaredComplete) {
+                html += note('text-red-600 mt-1', 'fa-circle-exclamation',
+                    'คุณกำลังระบุว่ากรอกครบ ทั้งที่ยังมีช่องว่าง — ยืนยันได้ แต่โปรดตรวจสอบอีกครั้ง');
+            }
+
+            // Grouped by step, each with a shortcut back to fix it.
+            const byStep = new Map();
+            check.missing.forEach(({ step, label }) => {
+                if (!byStep.has(step)) byStep.set(step, []);
+                byStep.get(step).push(label);
+            });
+            html += '<div class="mt-2 max-h-36 overflow-y-auto pr-1 space-y-2" data-testid="completion-missing">';
+            byStep.forEach((labels, step) => {
+                html += `<div>
+                    <button type="button" onclick="appState.jumpToStepFromRecheck(${step})"
+                            class="font-semibold text-chula-darker hover:underline text-left">
+                        ขั้นตอน ${step}: ${escapeHTML(STEP_LABELS[step] ?? '')}
+                        <i class="fa-solid fa-arrow-up-right-from-square text-xs ml-1"></i>
+                    </button>
+                    <ul class="list-disc list-inside text-gray-600">
+                        ${labels.map(label => `<li>${escapeHTML(label)}</li>`).join('')}
+                    </ul>
+                </div>`;
+            });
+            html += '</div>';
+        }
+        detail.innerHTML = html;
+    },
+
+    /** From the recheck list: close the modal and land on the step that has the gap. */
+    jumpToStepFromRecheck(step) {
+        this.hideRecheckModal();
+        this.goToStep(step);
     },
 
     hideRecheckModal() {
@@ -3590,6 +3681,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('nav-user').classList.remove('hidden');
         // Public marketing/info page -- not useful once already inside the app.
         document.getElementById('about-nav-link')?.classList.add('hidden');
+        document.getElementById('about-us-nav-link')?.classList.add('hidden');
         initializeNewProject(identity, urlParams.get('fresh') !== '0');
 
         const requestedStep = Number(urlParams.get('step'));
@@ -3631,6 +3723,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('nav-user').classList.remove('hidden');
         // Public marketing/info page -- not useful once already inside the app.
         document.getElementById('about-nav-link')?.classList.add('hidden');
+        document.getElementById('about-us-nav-link')?.classList.add('hidden');
 
         if (projectId) {
             await loadExistingProject(projectId, identity, resumeDraft);
