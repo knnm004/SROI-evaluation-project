@@ -453,44 +453,26 @@
 }
 
 /* ===== Landing: photo wall ======================================================== */
-/* Columns of tiles drift in opposite directions on a slight tilt, so many photos are in
-   view at once. Each track holds its loop twice and moves exactly one loop's height, then
-   restarts -- seamless as long as spacing is margin on each tile (not flex gap), so that
-   half the track is exactly one loop. The wall is oversized and rotated inside a clipped
-   viewport; the scale hides the corners the rotation would otherwise expose. */
+/* An Instagram-profile-style feed that moves by itself: pictures keep their own
+   proportions, sit in 2-3 tightly spaced columns with square corners, and every column
+   drifts upward. Columns are built in src/lib/landingPhotoWall.js; each track holds its
+   photos twice and moves exactly one copy's height, then restarts (seamless). Hovering
+   pauses it so a photo can be clicked. The soft top/bottom fade hides the wrap-around. */
 .landing-gallery-viewport {
-  /* Two masks intersected: top/bottom fade, and a left-to-right fade that takes the photos
-     to fully transparent at the right edge -- so the wall dissolves into the page backdrop
-     instead of ending in a box edge. The small left fade stops a hard straight cut there. */
-  -webkit-mask-image:
-    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent),
-    linear-gradient(to right, transparent, #000 4%, #000 77%, transparent 100%);
-  -webkit-mask-composite: source-in;
-  mask-image:
-    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent),
-    linear-gradient(to right, transparent, #000 4%, #000 77%, transparent 100%);
-  mask-composite: intersect;
-}
-@media (max-width: 1023px) {
-  /* Stacked layout: the wall is a full-width banner, so keep it edge to edge. */
-  .landing-gallery-viewport {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
-    mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
-  }
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
 }
 .photo-wall {
-  position: absolute;
-  inset: -12% -10%;
   display: flex;
-  gap: 0.9rem;
-  transform: rotate(-5deg);
+  align-items: flex-start;
+  gap: 0.35rem;
 }
-.photo-col { flex: 1 1 0; min-width: 0; overflow: visible; }
+.photo-col { flex: 1 1 0; min-width: 0; }
 .photo-track {
   animation: photo-drift var(--drift-duration, 60s) linear var(--drift-delay, 0s) infinite;
   will-change: transform;
 }
-.photo-track.is-down { animation-direction: reverse; }
 .photo-wall:hover .photo-track { animation-play-state: paused; }
 @keyframes photo-drift {
   from { transform: translateY(0); }
@@ -500,19 +482,55 @@
   display: block;
   position: relative;
   width: 100%;
-  margin: 0 0 0.9rem;
+  margin: 0 0 0.35rem;
   padding: 0;
   border: 0;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 0;
   background: #f3e7ec;
   cursor: zoom-in;
-  box-shadow: 0 14px 28px -18px rgba(31, 41, 55, 0.5);
-  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.45s ease;
+  transition: filter 0.3s ease;
 }
 .photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-tile img.is-contain { object-fit: contain; background: #fff; padding: 0.75rem; }
-.photo-tile:hover { transform: scale(1.04); box-shadow: 0 24px 40px -16px rgba(218, 95, 142, 0.7); z-index: 2; }
+.photo-tile:hover { filter: brightness(1.06) saturate(1.05); }
+.photo-caption {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.6rem 0.7rem 0.55rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #fff;
+  background: linear-gradient(to top, rgba(31, 17, 24, 0.78), rgba(31, 17, 24, 0));
+  opacity: 0;
+  transform: translateY(0.4rem);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+.photo-tile:hover .photo-caption,
+.photo-tile:focus-visible .photo-caption { opacity: 1; transform: none; }
+.photo-tile img.is-contain ~ .photo-caption { background: linear-gradient(to top, rgba(31, 17, 24, 0.85), rgba(31, 17, 24, 0)); }
+
+/* Showcase: the wall as one composed piece -- a pink plate offset behind a white-framed
+   window. The padding
+   (not negative margins) makes room for the offset, so nothing overflows the page. */
+.showcase { padding: 0 0.9rem 0.9rem 0; }
+.showcase-plate {
+  position: absolute;
+  inset: 0.9rem 0 0 0.9rem;
+  background: linear-gradient(145deg, #DA5F8E 0%, #f1a3bf 55%, #fbd9e5 100%);
+}
+.showcase-frame {
+  border: 6px solid #fff;
+  background: #fff;
+  box-shadow: 0 24px 48px -24px rgba(143, 38, 80, 0.55);
+}
+@media (min-width: 1024px) {
+  .showcase { padding: 0 1.25rem 1.25rem 0; }
+  .showcase-plate { inset: 1.25rem 0 0 1.25rem; }
+}
 .photo-tile:focus-visible { outline: 3px solid #DA5F8E; outline-offset: -3px; }
 
 /* Lightbox (click a photo) */
