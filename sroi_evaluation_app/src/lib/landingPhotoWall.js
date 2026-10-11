@@ -1,11 +1,13 @@
 /**
- * The landing page's photo wall: several columns of pictures drifting in opposite
- * directions on a slight tilt, so a lot of photos are in view at once.
+ * The landing page's photo wall: an Instagram-profile-style feed that moves by itself. Pictures keep their own
+ * proportions (tall, wide, square), are packed into 2-3 columns, and the person scrolls the
+ * feed vertically with the wheel / finger. Clicking a photo opens it large.
  *
  * SOURCE OF TRUTH is the list of <img data-gallery-item> inside #landing-gallery-source
- * in index.html -- to add a photo, add an <img> line there; nothing here changes.
- * Optional per-image attribute: data-fit="contain" for artwork that must not be cropped
- * (e.g. a diagram); everything else is cropped to fill its tile.
+ * in index.html -- to add a photo, add an <img> line there; nothing here changes. Give it
+ * width/height attributes (its real pixel size) so the tile reserves the right shape before
+ * the picture loads. Optional: data-fit="contain" for artwork that must not be cropped
+ * (e.g. a diagram).
  *
  * The wall is rebuilt from that list (as fresh elements, never by moving the originals)
  * whenever the column count changes with screen width, so resizing is always safe.
@@ -14,20 +16,14 @@
 const SOURCE_ID = 'landing-gallery-source';
 const WALL_ID = 'landing-photo-wall';
 
-/** Tile shapes cycle through these so the wall has a masonry feel rather than a grid. */
-const TILE_RATIOS = ['4 / 5', '1 / 1', '5 / 6', '3 / 4'];
+/** Extreme shapes (3-photo strips) are limited so no tile is a sliver; the lightbox shows all. */
+const MIN_RATIO = 0.56; // width / height
+const MAX_RATIO = 1.8;
+const FALLBACK_RATIO = 1;
 
-/** Rough px per second of drift, and per-column speed/phase variation. */
-const DRIFT_PX_PER_S = 26;
-const COLUMN_SPEED = [1, 0.82, 1.18, 0.92];
-const COLUMN_PHASE = [0, 0.37, 0.71, 0.18];
-const AVG_TILE_PX = 230;
-
-/** Every column needs at least this many tiles per loop so the drift never shows a gap. */
-const MIN_TILES_PER_LOOP = 6;
-
-const prefersReducedMotion = () =>
-    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+/** Px per second of upward drift, and each column's starting offset (fraction of a loop). */
+const DRIFT_PX_PER_S = 28;
+const COLUMN_PHASE = [0, 0.43, 0.21];
 
 let cleanup = null;
 
@@ -37,15 +33,21 @@ export function initLandingPhotoWall() {
     const source = document.getElementById(SOURCE_ID);
     if (!wall || !source || wall.dataset.ready) return;
 
-    const photos = Array.from(source.querySelectorAll('[data-gallery-item]')).map(img => ({
-        src: img.getAttribute('src'),
-        alt: img.getAttribute('alt') || '',
-        contain: img.dataset.fit === 'contain'
-    }));
+    const photos = Array.from(source.querySelectorAll('[data-gallery-item]')).map(img => {
+        const width = Number(img.getAttribute('width'));
+        const height = Number(img.getAttribute('height'));
+        const natural = width > 0 && height > 0 ? width / height : FALLBACK_RATIO;
+        return {
+            src: img.getAttribute('src'),
+            alt: img.getAttribute('alt') || '',
+            contain: img.dataset.fit === 'contain',
+            ratio: Math.min(MAX_RATIO, Math.max(MIN_RATIO, natural))
+        };
+    });
     if (!photos.length) return;
     wall.dataset.ready = 'true';
 
-    const host = wall.parentElement; // the clipped viewport the wall tilts inside
+    const host = wall.parentElement; // the clipped viewport
     let columnCount = 0;
 
     const desiredColumns = () => (host.clientWidth >= 480 ? 3 : 2);
@@ -55,51 +57,48 @@ export function initLandingPhotoWall() {
         if (cols === columnCount) return;
         columnCount = cols;
         wall.replaceChildren();
-        wall.style.setProperty('--wall-cols', String(cols));
 
-        // Diagonal shift (i + floor(i/cols)) so a short list that repeats the same few
-        // photos does not put the same photo down an entire column.
-        const perColumn = Array.from({ length: cols }, () => []);
-        photos.forEach((photo, index) => {
-            perColumn[(index + Math.floor(index / cols)) % cols].push(index);
-        });
-
-        let tileCounter = 0;
-        perColumn.forEach((indexes, colIndex) => {
-            if (!indexes.length) return;
-            const repeats = Math.max(1, Math.ceil(MIN_TILES_PER_LOOP / indexes.length));
-            const loop = [];
-            for (let r = 0; r < repeats; r += 1) loop.push(...indexes);
-
+        const columns = Array.from({ length: cols }, () => {
             const column = document.createElement('div');
             column.className = 'photo-col';
             const track = document.createElement('div');
             track.className = 'photo-track';
-            if (colIndex % 2 === 1) track.classList.add('is-down');
-
-            const duration = Math.min(140, Math.max(32,
-                (loop.length * AVG_TILE_PX) / (DRIFT_PX_PER_S * COLUMN_SPEED[colIndex % COLUMN_SPEED.length])));
-            track.style.setProperty('--drift-duration', `${duration.toFixed(1)}s`);
-            track.style.setProperty('--drift-delay', `${(-duration * COLUMN_PHASE[colIndex % COLUMN_PHASE.length]).toFixed(1)}s`);
-
-            // Two identical loops back to back: the track drifts exactly one loop's height.
-            [false, true].forEach(isCopy => {
-                loop.forEach(photoIndex => {
-                    track.append(makeTile(photos[photoIndex], photoIndex, tileCounter, isCopy));
-                    tileCounter += 1;
-                });
-            });
-
             column.append(track);
             wall.append(column);
+            return { track, indexes: [], height: 0 };
+        });
+
+        // Each photo goes to the currently shortest column (heights in column-widths, so
+        // 1/ratio), which keeps the columns level whatever mix of shapes comes in.
+        photos.forEach((photo, index) => {
+            const target = columns.reduce((best, column) => (column.height < best.height ? column : best));
+            target.indexes.push(index);
+            target.height += 1 / photo.ratio;
+        });
+
+        const columnWidth = host.clientWidth / cols;
+        columns.forEach((column, colIndex) => {
+            // The column's photos twice, back to back: the track drifts up exactly one
+            // copy's height and restarts, which is seamless because spacing is margin on
+            // each tile (not flex gap), so half the track is exactly one copy.
+            [false, true].forEach(isCopy => {
+                column.indexes.forEach(photoIndex =>
+                    column.track.append(makeTile(photos[photoIndex], photoIndex, isCopy)));
+            });
+            // Same speed in px/s whatever the column's length, started at different offsets
+            // so the columns do not move in lockstep.
+            const loopPx = column.height * columnWidth;
+            const duration = Math.min(220, Math.max(30, loopPx / DRIFT_PX_PER_S));
+            column.track.style.setProperty('--drift-duration', `${duration.toFixed(1)}s`);
+            column.track.style.setProperty('--drift-delay', `${(-duration * COLUMN_PHASE[colIndex % COLUMN_PHASE.length]).toFixed(1)}s`);
         });
     };
 
-    function makeTile(photo, photoIndex, counter, isCopy) {
+    function makeTile(photo, photoIndex, isCopy) {
         const tile = document.createElement('button');
         tile.type = 'button';
         tile.className = 'photo-tile';
-        tile.style.aspectRatio = photo.contain ? '1 / 1' : TILE_RATIOS[counter % TILE_RATIOS.length];
+        tile.style.aspectRatio = String(photo.contain ? 1 : photo.ratio);
         if (isCopy) {
             tile.tabIndex = -1;
             tile.setAttribute('aria-hidden', 'true');
@@ -111,9 +110,20 @@ export function initLandingPhotoWall() {
         img.src = photo.src;
         img.alt = isCopy ? '' : photo.alt;
         img.decoding = 'async';
+        // The first photos load at once; the rest as the drift brings them near.
+        img.loading = photoIndex < 6 ? 'eager' : 'lazy';
         img.draggable = false;
         if (photo.contain) img.className = 'is-contain';
         tile.append(img);
+
+        // Caption revealed on hover / keyboard focus (the drift pauses on hover, so it is
+        // readable). Decorative on the repeated copy.
+        if (photo.alt && !isCopy) {
+            const caption = document.createElement('span');
+            caption.className = 'photo-caption';
+            caption.textContent = photo.alt;
+            tile.append(caption);
+        }
 
         tile.addEventListener('click', () => openLightbox(photos, photoIndex));
         return tile;

@@ -219,7 +219,7 @@ async function fetchProjects() {
                            </div>`
                         : ''}
                 </div>
-                <h3 class="text-xl font-bold text-gray-900 mb-2 pr-8 group-hover:text-chula transition-colors line-clamp-2">
+                <h3 class="text-lg sm:text-xl font-bold text-gray-900 leading-snug mb-3 pr-8 break-words group-hover:text-chula transition-colors" data-testid="project-card-title">
                     ${escapeHTML(project.project_name) || 'ไม่ได้ระบุชื่อโครงการ (Untitled)'}
                 </h3>
                 <p class="text-sm text-gray-500 mb-1">

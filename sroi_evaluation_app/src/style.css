@@ -2,11 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Served from public/fonts/, so the URLs are absolute from the site root and are
-   copied verbatim by Vite -- do not turn them into relative paths. Sarabun (from
-   the Google Fonts <link> in each page) stays as the fallback: ChulaCharasNew has
-   no Latin italic coverage worth relying on, and it is a .ttf, so a slow first
-   paint falls back rather than blocking. */
+/* THE typeface: ChulaCharasNew, per the Chula CI guide. Nothing else is used -- there is no
+   second webfont and no Google Fonts request. Served from public/fonts/, so the URLs are
+   absolute from the site root and are copied verbatim by Vite -- do not turn them into
+   relative paths. Only 400 and 700 exist: font-medium (500) shows as regular and
+   font-semibold (600) as bold. The page <head>s preload the two used files. */
 @font-face {
   font-family: 'ChulaCharasNew';
   src: url('/fonts/ChulaCharasNewReg.ttf') format('truetype');
@@ -41,17 +41,11 @@
 
 @layer base {
   body {
-    font-family: 'ChulaCharasNew', 'Sarabun', sans-serif;
+    font-family: 'ChulaCharasNew', sans-serif;
   }
 }
 
 @layer components {
-  /* Only the step labels under the breadcrumb/stepper -- Noto Sans Mende Kikakui's
-     capital "I" and digit "1" are visually distinct, unlike the site's main fonts. */
-  .stepper-label {
-    font-family: 'Noto Sans Mende Kikakui', sans-serif;
-  }
-
   .form-panel {
     @apply bg-gray-50 p-4 rounded-xl border border-gray-200;
   }
@@ -459,44 +453,26 @@
 }
 
 /* ===== Landing: photo wall ======================================================== */
-/* Columns of tiles drift in opposite directions on a slight tilt, so many photos are in
-   view at once. Each track holds its loop twice and moves exactly one loop's height, then
-   restarts -- seamless as long as spacing is margin on each tile (not flex gap), so that
-   half the track is exactly one loop. The wall is oversized and rotated inside a clipped
-   viewport; the scale hides the corners the rotation would otherwise expose. */
+/* An Instagram-profile-style feed that moves by itself: pictures keep their own
+   proportions, sit in 2-3 tightly spaced columns with square corners, and every column
+   drifts upward. Columns are built in src/lib/landingPhotoWall.js; each track holds its
+   photos twice and moves exactly one copy's height, then restarts (seamless). Hovering
+   pauses it so a photo can be clicked. The soft top/bottom fade hides the wrap-around. */
 .landing-gallery-viewport {
-  /* Two masks intersected: top/bottom fade, and a left-to-right fade that takes the photos
-     to fully transparent at the right edge -- so the wall dissolves into the page backdrop
-     instead of ending in a box edge. The small left fade stops a hard straight cut there. */
-  -webkit-mask-image:
-    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent),
-    linear-gradient(to right, transparent, #000 4%, #000 77%, transparent 100%);
-  -webkit-mask-composite: source-in;
-  mask-image:
-    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent),
-    linear-gradient(to right, transparent, #000 4%, #000 77%, transparent 100%);
-  mask-composite: intersect;
-}
-@media (max-width: 1023px) {
-  /* Stacked layout: the wall is a full-width banner, so keep it edge to edge. */
-  .landing-gallery-viewport {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
-    mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
-  }
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
 }
 .photo-wall {
-  position: absolute;
-  inset: -12% -10%;
   display: flex;
-  gap: 0.9rem;
-  transform: rotate(-5deg);
+  align-items: flex-start;
+  gap: 0.35rem;
 }
-.photo-col { flex: 1 1 0; min-width: 0; overflow: visible; }
+.photo-col { flex: 1 1 0; min-width: 0; }
 .photo-track {
   animation: photo-drift var(--drift-duration, 60s) linear var(--drift-delay, 0s) infinite;
   will-change: transform;
 }
-.photo-track.is-down { animation-direction: reverse; }
 .photo-wall:hover .photo-track { animation-play-state: paused; }
 @keyframes photo-drift {
   from { transform: translateY(0); }
@@ -506,19 +482,55 @@
   display: block;
   position: relative;
   width: 100%;
-  margin: 0 0 0.9rem;
+  margin: 0 0 0.35rem;
   padding: 0;
   border: 0;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 0;
   background: #f3e7ec;
   cursor: zoom-in;
-  box-shadow: 0 14px 28px -18px rgba(31, 41, 55, 0.5);
-  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.45s ease;
+  transition: filter 0.3s ease;
 }
 .photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-tile img.is-contain { object-fit: contain; background: #fff; padding: 0.75rem; }
-.photo-tile:hover { transform: scale(1.04); box-shadow: 0 24px 40px -16px rgba(218, 95, 142, 0.7); z-index: 2; }
+.photo-tile:hover { filter: brightness(1.06) saturate(1.05); }
+.photo-caption {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.6rem 0.7rem 0.55rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #fff;
+  background: linear-gradient(to top, rgba(31, 17, 24, 0.78), rgba(31, 17, 24, 0));
+  opacity: 0;
+  transform: translateY(0.4rem);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+.photo-tile:hover .photo-caption,
+.photo-tile:focus-visible .photo-caption { opacity: 1; transform: none; }
+.photo-tile img.is-contain ~ .photo-caption { background: linear-gradient(to top, rgba(31, 17, 24, 0.85), rgba(31, 17, 24, 0)); }
+
+/* Showcase: the wall as one composed piece -- a pink plate offset behind a white-framed
+   window. The padding
+   (not negative margins) makes room for the offset, so nothing overflows the page. */
+.showcase { padding: 0 0.9rem 0.9rem 0; }
+.showcase-plate {
+  position: absolute;
+  inset: 0.9rem 0 0 0.9rem;
+  background: linear-gradient(145deg, #DA5F8E 0%, #f1a3bf 55%, #fbd9e5 100%);
+}
+.showcase-frame {
+  border: 6px solid #fff;
+  background: #fff;
+  box-shadow: 0 24px 48px -24px rgba(143, 38, 80, 0.55);
+}
+@media (min-width: 1024px) {
+  .showcase { padding: 0 1.25rem 1.25rem 0; }
+  .showcase-plate { inset: 1.25rem 0 0 1.25rem; }
+}
 .photo-tile:focus-visible { outline: 3px solid #DA5F8E; outline-offset: -3px; }
 
 /* Lightbox (click a photo) */
@@ -573,11 +585,14 @@
   position: relative;
   isolation: isolate;
   border-radius: 2rem;
-  background: linear-gradient(135deg, #ffffff 0%, #fff8fb 45%, #ffe8f1 100%);
-  border: 1px solid rgba(218, 95, 142, 0.16);
+  /* Stays near-white edge to edge: the page behind is pale pink, so a card that itself
+     fades to pink disappears into it. Separation comes from a definite pink border and a
+     deeper shadow. */
+  background: linear-gradient(135deg, #ffffff 0%, #ffffff 55%, #fff6fa 100%);
+  border: 1.5px solid rgba(218, 95, 142, 0.5);
   box-shadow:
-    0 40px 80px -42px rgba(218, 95, 142, 0.55),
-    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+    0 36px 70px -28px rgba(143, 38, 80, 0.45),
+    0 10px 24px -12px rgba(143, 38, 80, 0.25);
 }
 .stats-blob {
   position: absolute;
@@ -588,12 +603,12 @@
 }
 .stats-blob-a {
   top: -11rem; right: -9rem; width: 32rem; height: 32rem;
-  background: radial-gradient(circle, rgba(218, 95, 142, 0.30), transparent 65%);
+  background: radial-gradient(circle, rgba(218, 95, 142, 0.11), transparent 65%);
   animation: stats-drift-a 20s ease-in-out infinite alternate;
 }
 .stats-blob-b {
   bottom: -13rem; left: -9rem; width: 34rem; height: 34rem;
-  background: radial-gradient(circle, rgba(255, 190, 120, 0.34), transparent 65%);
+  background: radial-gradient(circle, rgba(255, 190, 120, 0.14), transparent 65%);
   animation: stats-drift-b 26s ease-in-out infinite alternate;
 }
 @keyframes stats-drift-a { to { transform: translate(-9rem, 7rem) scale(1.18); } }
@@ -634,14 +649,14 @@
 /* The sentence that carries the live number. */
 .stats-sentence {
   margin-top: 1.25rem;
-  font-size: clamp(1.4rem, 2.7vw, 2.15rem);
-  line-height: 2;
+  font-size: clamp(1.15rem, 2vw, 1.6rem);
+  line-height: 1.95;
   font-weight: 500;
   color: #1f2937;
 }
 .stats-sentence-sm {
-  font-size: clamp(1.05rem, 1.7vw, 1.3rem);
-  line-height: 2;
+  font-size: clamp(0.95rem, 1.35vw, 1.12rem);
+  line-height: 1.95;
   font-weight: 500;
   color: #374151;
 }
@@ -817,7 +832,15 @@
 .cat-body { display: flex; flex-direction: column; min-width: 0; }
 .cat-name {
   font-size: 0.875rem;
-  line-height: 1.35;
+  /* Thai stacks vowels and tone marks ABOVE the line. overflow:hidden (required by the line
+     clamp) slices at the box edge, so with a tight line-height the marks were cut off --
+     "น้ำ" read as "นำ", "ที่" as "ที". A taller line-height plus top padding gives them
+     room (negative margin keeps the layout where it was). Padding goes on TOP ONLY: with
+     bottom padding the clamped-away next line peeks through it. Lower vowels (ุ ู) already
+     fit inside the taller line box. */
+  line-height: 1.7;
+  padding-top: 0.3em;
+  margin-top: -0.3em;
   color: #6b7280;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -871,7 +894,10 @@
 .sdg-title {
   font-size: 0.8rem;
   font-weight: 600;
-  line-height: 1.3;
+  /* Same Thai tone-mark clipping as .cat-name above -- see the note there. */
+  line-height: 1.65;
+  padding-top: 0.35em;
+  margin-top: -0.35em;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -964,15 +990,49 @@ body.landing-bg {
   background-attachment: fixed;
 }
 
-/* ===== Landing: scenes, hero polish, scroll cue ===================================== */
-/* Each scene is a screen-sized snap stop. Snapping is `proximity` (not mandatory) so it
-   never traps a user mid-scroll, and is only switched on (html.landing-snap) once the
-   second scene exists. --site-header-h = the sticky header (h-20 = 5rem, plus its 4px border) + a little breathing room. */
-html.landing-snap:has(body.landing-bg) {
-  scroll-snap-type: y proximity;
-  scroll-padding-top: calc(var(--site-header-h) + 0.75rem);
+/* ===== About pages backdrop ========================================================= */
+/* The landing page's pink corner glows, one notch quieter, with layered wave bands (four
+   along the top edge, three along the bottom, each only 4-6 percent pink) and the Chula
+   starburst motif -- the same one drawn behind the landing hero in index.html -- scattered
+   down the page's edges at several sizes and angles, at about double the landing page's
+   opacity so it is actually seen. Everything is ordinary (scrolling) background of the
+   page itself, nothing fixed to the viewport, so it moves with the content like paper.
+   The stars sit in the side margins; the cards on these pages are solid white. Set on
+   <body> via the about-bg class in about.html / about-us.html. */
+body.about-bg {
+  background-color: #fdf8fb;
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%280 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%2845 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%2820 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%2870 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%2810 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%2835 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%2860 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 220 220'><g opacity='0.16' fill='none' stroke='%23DA5F8E' stroke-width='2' stroke-linecap='round' transform='rotate%2815 100 100%29'><circle cx='100' cy='100' r='14' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='170' y2='100'/><circle cx='170' cy='100' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='180' y2='129'/><circle cx='180' cy='129' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='157' y2='148'/><circle cx='157' cy='148' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='178'/><circle cx='145' cy='178' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='111' y2='164'/><circle cx='111' cy='164' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='86' y2='179'/><circle cx='86' cy='179' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='161'/><circle cx='65' cy='161' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='35' y2='155'/><circle cx='35' cy='155' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='30' y2='126'/><circle cx='30' cy='126' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='10' y2='100'/><circle cx='10' cy='100' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='78'/><circle cx='39' cy='78' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='39' y2='49'/><circle cx='39' cy='49' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='65' y2='39'/><circle cx='65' cy='39' r='4' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='85' y2='16'/><circle cx='85' cy='16' r='6' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='113' y2='26'/><circle cx='113' cy='26' r='3' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='145' y2='22'/><circle cx='145' cy='22' r='7' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='150' y2='58'/><circle cx='150' cy='58' r='5' fill='%23DA5F8E' stroke='none'/> <line x1='100' y1='100' x2='175' y2='73'/><circle cx='175' cy='73' r='4' fill='%23DA5F8E' stroke='none'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 240' preserveAspectRatio='none'><path fill='%23DA5F8E' fill-opacity='0.045' d='M0 0H1440V150C1230 215 960 95 700 150C440 205 210 160 0 135Z'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 240' preserveAspectRatio='none'><path fill='%23E7799F' fill-opacity='0.05' d='M0 0H1440V110C1210 175 950 60 690 115C430 170 200 125 0 100Z'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 240' preserveAspectRatio='none'><path fill='%23DA5F8E' fill-opacity='0.055' d='M0 0H1440V80C1190 140 930 35 670 85C410 135 190 100 0 70Z'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 240' preserveAspectRatio='none'><path fill='%23F3A6BF' fill-opacity='0.06' d='M0 0H1440V45C1170 100 910 15 650 55C390 95 170 70 0 40Z'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 240' preserveAspectRatio='none'><path fill='%23DA5F8E' fill-opacity='0.04' d='M0 240H1440V120C1230 60 960 190 700 140C440 90 210 150 0 115Z'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 240' preserveAspectRatio='none'><path fill='%23E7799F' fill-opacity='0.05' d='M0 240H1440V150C1200 95 950 205 690 160C430 115 200 170 0 140Z'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 240' preserveAspectRatio='none'><path fill='%23DA5F8E' fill-opacity='0.055' d='M0 240H1440V185C1190 140 930 225 670 190C410 155 190 205 0 180Z'/></svg>"),
+    radial-gradient(48rem 30rem at -8% -14%, rgba(218, 95, 142, 0.18), transparent 62%),
+    radial-gradient(42rem 28rem at 108% -10%, rgba(248, 180, 196, 0.32), transparent 62%),
+    radial-gradient(48rem 32rem at 106% 108%, rgba(218, 95, 142, 0.14), transparent 62%),
+    radial-gradient(42rem 28rem at -6% 108%, rgba(248, 180, 196, 0.28), transparent 62%);
+  background-repeat: no-repeat;
+  background-position: -5rem -4rem, calc(100% + 4rem) 16%, -3rem 34%, calc(100% + 6rem) 46%, 2% 66%, calc(100% + 2rem) 82%, -6rem 92%, 96% 5rem, top left, top left, top left, top left, bottom left, bottom left, bottom left, 0 0, 0 0, 0 0, 0 0;
+  background-size: 19rem 19rem, 13rem 13rem, 10rem 10rem, 17rem 17rem, 8rem 8rem, 11rem 11rem, 15rem 15rem, 7rem 7rem, 100% 19rem, 100% 15rem, 100% 11.5rem, 100% 8rem, 100% 16rem, 100% 12rem, 100% 8.5rem, auto, auto, auto, auto;
 }
-.landing-scene { scroll-snap-align: start; }
+
+/* ===== Landing: scenes, hero polish, scroll cue ===================================== */
+/* Each scene is a screen-sized block. There is deliberately NO scroll-snap: snapping
+   (even `proximity`) pulled the page back to the hero whenever someone scrolled a little.
+   scroll-padding-top still matters -- the scroll cue and side dots use scrollIntoView(),
+   which must stop below the sticky header. --site-header-h = the sticky header (h-20 = 5rem,
+   plus its 4px border) + a little breathing room. */
+html:has(body.landing-bg) { scroll-padding-top: calc(var(--site-header-h) + 0.75rem); }
 .landing-scene-hero {
   display: flex;
   flex-direction: column;
@@ -1202,3 +1262,30 @@ body.login-bg::after {
 @media (prefers-reduced-motion: reduce) {
   .lang-menu { transition: none; }
 }
+
+/* ===== Landing hero: the name block ================================================= */
+/* The Thai title's size comes from --hero-name-size (it was text-2xl / md:text-4xl). The
+   English "Chula Triple S System" above it is a fixed multiple of that, chosen by
+   measuring the rendered glyphs: at 1.07x, its right edge lands on the "น" ending
+   "ตอบแทน" in ระบบประเมินผลตอบแทนทางสังคม (about 73% of the Thai line's width). Because both
+   follow the same variable, that alignment holds at every breakpoint. Change the 1.07 to
+   move where the English line ends. */
+.hero-name { --hero-name-size: 1.5rem; }
+@media (min-width: 768px) { .hero-name { --hero-name-size: 2.25rem; } }
+.hero-name-th { font-size: var(--hero-name-size); line-height: 1.5; }
+.hero-name-en { font-size: calc(var(--hero-name-size) * 1.07); line-height: 1.3; }
+
+/* ===== One typeface, everywhere (ChulaCharasNew) =================================== */
+/* font-mono is kept for figures but now resolves to ChulaCharasNew (tailwind.config.js);
+   tabular-nums keeps the digits in aligned columns without needing a monospace face. */
+.font-mono { font-variant-numeric: tabular-nums; }
+
+/* Leaflet's stylesheet (loaded from unpkg, not in this repo) hard-codes two other faces:
+   "Helvetica Neue", Arial on every map container (attribution line, popups, controls), and
+   "Lucida Console" on the zoom +/- buttons (`font: bold 18px ...`, a shorthand, so only the
+   family is replaced here and the size/weight it sets are kept). `body` in the selectors
+   outranks Leaflet's regardless of stylesheet order. ChulaCharasNew has both the + and −
+   glyphs, so nothing falls through to a system font. */
+body .leaflet-container { font-family: inherit; }
+body .leaflet-bar a,
+body .leaflet-touch .leaflet-bar a { font-family: inherit; }

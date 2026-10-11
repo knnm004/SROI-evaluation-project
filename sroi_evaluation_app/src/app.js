@@ -3597,10 +3597,10 @@ export const appState = {
             }
         } else {
             html += note('text-amber-700', 'fa-triangle-exclamation',
-                `ระบบพบว่ายังว่าง ${gaps} จาก ${check.total} รายการ`);
+                `ระบบพบว่ายังมีข้อมูลว่างอยู่ ${gaps} จาก ${check.total} รายการ`);
             if (declaredComplete) {
                 html += note('text-red-600 mt-1', 'fa-circle-exclamation',
-                    'คุณกำลังระบุว่ากรอกครบ ทั้งที่ยังมีช่องว่าง — ยืนยันได้ แต่โปรดตรวจสอบอีกครั้ง');
+                    'หากยืนยันว่ากรอกข้อมูลครบถ้วนแล้ว  ระบบจะแสดงผลเป็น "กรอกครบแล้ว" แต่สามารถกลับมาแก้ไขต่อได้ภายหลัง');
             }
 
             // Grouped by step, each with a shortcut back to fix it.

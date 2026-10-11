@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>เกี่ยวกับระบบ - Chula Triple S System</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Noto+Sans+Mende+Kikakui&display=swap" rel="stylesheet">
+    <!-- The one typeface (ChulaCharasNew, self-hosted -- see @font-face in src/style.css).
+         Preloaded so it is already there at first paint instead of a system font flashing
+         first. Both weights the site uses; the italics are declared but not used. -->
+    <link rel="preload" href="/fonts/ChulaCharasNewReg.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="preload" href="/fonts/ChulaCharasNewBold.ttf" as="font" type="font/ttf" crossorigin>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
+<body class="about-bg text-gray-800 min-h-screen flex flex-col overflow-x-hidden">
 
     <header class="bg-white shadow-sm border-b-4 border-chula sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
