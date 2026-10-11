@@ -388,11 +388,7 @@ export function mountLandingStats(stats, { sdgs, categories }) {
         tween(linkedEl, shown(sdgCounts.filter(n => n > 0).length));
 
         resetBtn?.classList.toggle('hidden', !filtered);
-        if (noteEl) {
-            noteEl.textContent = stats.uncategorized
-                ? `หนึ่งโครงการเลือกได้หลาย SDGs · ยังไม่ระบุหมวดหมู่ ${fmt(stats.uncategorized)} โครงการ`
-                : 'หนึ่งโครงการเลือกได้หลาย SDGs';
-        }
+        if (noteEl) noteEl.textContent = 'หนึ่งโครงการเลือกได้หลาย SDGs';
     }
 
     // ---- reveal ------------------------------------------------------------------------
