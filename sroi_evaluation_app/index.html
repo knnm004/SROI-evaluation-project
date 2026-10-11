@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ระบบประเมิน SROI - จุฬาลงกรณ์มหาวิทยาลัย</title>
     
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Noto+Sans+Mende+Kikakui&display=swap" rel="stylesheet">
+    <!-- The one typeface (ChulaCharasNew, self-hosted -- see @font-face in src/style.css).
+         Preloaded so it is already there at first paint instead of a system font flashing
+         first. Both weights the site uses; the italics are declared but not used. -->
+    <link rel="preload" href="/fonts/ChulaCharasNewReg.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="preload" href="/fonts/ChulaCharasNewBold.ttf" as="font" type="font/ttf" crossorigin>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -136,37 +138,64 @@
             -->
             <div id="landing-hero" data-testid="landing-hero" class="landing-scene landing-scene-hero relative">
                 <div class="lg:flex lg:items-center lg:gap-14 w-full flex-1">
-                    <div class="relative w-full h-72 sm:h-80 lg:h-[min(36rem,calc(100svh-15rem))] lg:w-1/2 lg:flex-shrink-0 overflow-hidden rounded-[1.75rem] mb-8 lg:mb-0"
+                    <!--
+                      SHOWCASE: the photo wall is presented as one composed piece, not a strip
+                      pasted beside the text -- a pink plate offset behind a white-framed
+                      window.
+                    -->
+                    <div id="landing-showcase" class="showcase relative w-full lg:w-1/2 lg:flex-shrink-0 mb-8 lg:mb-0">
+                    <div class="showcase-plate" aria-hidden="true"></div>
+                    <div class="showcase-frame relative w-full h-72 sm:h-80 lg:h-[min(36rem,calc(100svh-15rem))] overflow-hidden"
                          id="landing-carousel" data-testid="landing-carousel">
                         <!--
-                          PHOTO WALL. To add a picture, add another <img data-gallery-item ...>
-                          line to the list below -- that is the only edit needed. The wall
-                          (src/lib/landingPhotoWall.js) spreads them over several columns that
-                          drift in opposite directions; clicking a photo opens it large. Add
-                          data-fit="contain" to artwork that must not be cropped. The list is
-                          placeholder duplication until more photos are supplied. Aim for 12+
-                          photos, and resize them to ~900px wide first (the wall loads them all).
+                          PHOTO WALL (Instagram-profile style: photos keep their own shapes and
+                          the feed drifts upward by itself). To add a picture, add another
+                          <img data-gallery-item width=".." height=".."> line below, using the
+                          file's real pixel size so the tile is the right shape before it loads.
+                          Add data-fit="contain" to artwork that must not be cropped. Resize new
+                          photos to ~1000px on the long edge first. Logic: src/lib/landingPhotoWall.js.
                         -->
                         <div class="absolute inset-0 landing-gallery-viewport">
                             <div id="landing-photo-wall" class="photo-wall" role="group" aria-label="ภาพกิจกรรมของโครงการ"></div>
                         </div>
                         <div id="landing-gallery-source" hidden>
-                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item>
-                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item>
-                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item data-fit="contain">
-                            <img src="/images/SROI_banner_1.jpg" alt="SROI site visit" data-gallery-item>
-                            <img src="/images/SROI_banner_2.jpg" alt="SROI site visit" data-gallery-item>
-                            <img src="/images/triple-s-diagram.png" alt="Chula Triple S System framework diagram" data-gallery-item data-fit="contain">
+                            <img src="/images/gallery/activity-01-field-visit-group.webp" width="750" height="1000" alt="ทีมวิจัยลงพื้นที่พบชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-02-eco-pot-prototype.webp" width="750" height="1000" alt="ต้นแบบกระถางจากวัสดุเหลือใช้" data-gallery-item>
+                            <img src="/images/gallery/activity-03-machine-demo.webp" width="750" height="1000" alt="สาธิตเครื่องผสมวัสดุ" data-gallery-item>
+                            <img src="/images/gallery/activity-04-collage-community-products.webp" width="1000" height="980" alt="ผลิตภัณฑ์และกิจกรรมของชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-05-collage-farm-produce.webp" width="1000" height="977" alt="พื้นที่เกษตรและผลผลิตของชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-06-weaving-workshop.webp" width="1000" height="750" alt="กิจกรรมจักสานของกลุ่มชุมชน" data-gallery-item>
+                            <img src="/images/SROI_banner_1.jpg" width="1477" height="1108" alt="ลงพื้นที่ประเมินผลโครงการ SROI" data-gallery-item>
+                            <img src="/images/gallery/activity-07-rice-straw-display.webp" width="750" height="1000" alt="ฟางข้าวจากพื้นที่ชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-08-community-meeting.webp" width="1000" height="750" alt="ประชุมร่วมกับผู้แทนชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-09-collage-wood-design.webp" width="1000" height="653" alt="ผลิตภัณฑ์ไม้ออกแบบโดยชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-10-collage-exhibition.webp" width="1000" height="991" alt="นิทรรศการแสดงผลงานโครงการ" data-gallery-item>
+                            <img src="/images/gallery/activity-11-woodwork-workshop.webp" width="388" height="374" alt="ลงพื้นที่เยี่ยมกลุ่มงานไม้" data-gallery-item>
+                            <img src="/images/gallery/activity-12-collage-craft-workshop-a.webp" width="771" height="396" alt="เวิร์กช็อปงานหัตถกรรม" data-gallery-item>
+                            <img src="/images/gallery/activity-13-craft-workshop-a.webp" width="769" height="761" alt="เวิร์กช็อปงานหัตถกรรมร่วมกับชุมชน" data-gallery-item>
+                            <img src="/images/SROI_banner_2.jpg" width="1477" height="1108" alt="ลงพื้นที่ประเมินผลโครงการ SROI" data-gallery-item>
+                            <img src="/images/gallery/activity-14-craft-workshop-b.webp" width="789" height="783" alt="ผู้เข้าร่วมทำงานหัตถกรรม" data-gallery-item>
+                            <img src="/images/gallery/activity-15-collage-field-project.webp" width="1000" height="326" alt="กิจกรรมโครงการในพื้นที่" data-gallery-item>
+                            <img src="/images/gallery/activity-16-collage-community-visit.webp" width="803" height="377" alt="เยี่ยมชมและพูดคุยกับชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-17-collage-handicraft-bags.webp" width="1000" height="642" alt="ผลิตภัณฑ์หัตถกรรมของชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-18-collage-handicraft.webp" width="1000" height="331" alt="งานหัตถกรรมและการแสดงสินค้า" data-gallery-item>
+                            <img src="/images/gallery/activity-19-training-session.webp" width="801" height="374" alt="อบรมเชิงปฏิบัติการ" data-gallery-item>
+                            <img src="/images/gallery/activity-20-online-community.webp" width="1000" height="941" alt="ชุมชนออนไลน์ของโครงการ" data-gallery-item>
+                            <img src="/images/triple-s-diagram.png" width="1254" height="1254" alt="กรอบแนวคิด Chula Triple S System" data-gallery-item data-fit="contain">
+                            <img src="/images/gallery/activity-21-map-application.webp" width="462" height="1000" alt="แผนที่เศรษฐกิจชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-22-collage-food-menu.webp" width="792" height="773" alt="เมนูอาหารและผลิตภัณฑ์ชุมชน" data-gallery-item>
+                            <img src="/images/gallery/activity-23-group-photo.webp" width="1000" height="563" alt="ภาพหมู่ผู้เข้าร่วมโครงการ" data-gallery-item>
+                            <img src="/images/gallery/activity-24-classroom-workshop-a.webp" width="1000" height="750" alt="การอบรมในห้องเรียน" data-gallery-item>
+                            <img src="/images/gallery/activity-25-classroom-workshop-b.webp" width="1000" height="750" alt="การอบรมการประเมินผลกระทบ" data-gallery-item>
                         </div>
-                        <!-- Frosted blur that ramps in toward the right. No solid colour on purpose: the photos themselves fade to transparent (see .landing-gallery-viewport), so there is no coloured edge to mismatch the page backdrop. -->
-                        <div class="hidden lg:block absolute inset-y-0 right-0 w-[22%] pointer-events-none"
-                             style="-webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px); -webkit-mask-image: linear-gradient(to right, transparent, black 85%); mask-image: linear-gradient(to right, transparent, black 85%);"
-                             aria-hidden="true"></div>
+                    </div>
                     </div>
 
-                    <div class="lg:w-1/2 flex flex-col justify-center text-center lg:text-left">
-                        <p class="hero-rise text-lg md:text-xl font-semibold text-chula mb-1" style="--d:0">Chula Triple S System</p>
-                        <h2 class="hero-rise text-2xl md:text-4xl font-bold text-gray-900 mb-3" style="--d:1">ระบบประเมินผลตอบแทนทางสังคม</h2>
+                    <div class="hero-name lg:w-1/2 flex flex-col justify-center text-center lg:text-left">
+                        <!-- The English line is sized as a multiple of the Thai title (see .hero-name in
+                             style.css) so it ends at the "น" of "ตอบแทน" at every breakpoint. -->
+                        <p class="hero-rise hero-name-en font-semibold text-chula mb-1" style="--d:0">Chula Triple S System</p>
+                        <h2 class="hero-rise hero-name-th font-bold text-gray-900 mb-3" style="--d:1">ระบบประเมินผลตอบแทนทางสังคม</h2>
                         <p class="hero-rise hero-lead mx-auto lg:mx-0" style="--d:2">
                             ระบบสนับสนุนการประเมินและบริหารจัดการผลกระทบทางสังคมจากโครงการวิจัย นวัตกรรม และบริการวิชาการของจุฬาลงกรณ์มหาวิทยาลัย
 

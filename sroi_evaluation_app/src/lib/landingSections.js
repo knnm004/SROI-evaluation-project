@@ -1,5 +1,7 @@
 /**
- * Scroll behaviour for the landing page's two "scenes" (hero, then project overview).
+ * Scroll behaviour for the landing page's two "scenes" (hero, then project overview). The page scrolls freely: there is
+ * deliberately no scroll-snapping, which pulled the page back to the hero when someone tried
+ * to scroll a little.
  *
  * Everything here is conditional on there being a second scene at all: the overview is
  * hidden until get_public_project_stats() succeeds (src/lib/landingStats.js), and a
@@ -50,7 +52,6 @@ export function initLandingSections() {
     const enable = () => {
         nav.classList.add('is-ready');
         cue.classList.add('is-ready');
-        document.documentElement.classList.add('landing-snap');
     };
     if (!stats.classList.contains('hidden')) enable();
     else document.addEventListener('landing-stats-ready', enable, { once: true });

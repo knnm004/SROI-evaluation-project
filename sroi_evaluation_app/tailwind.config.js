@@ -13,8 +13,13 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // ChulaCharasNew is the ONLY typeface (Chula's CI). 'sans-serif' stays solely as the
+      // browser's last resort while the font file loads -- never as a design choice.
+      // `mono` is overridden too: Tailwind's default is a system monospace, which is what
+      // `font-mono` (money and figures in the report and SROI table) was quietly rendering in.
       fontFamily: {
-        sans: ['ChulaCharasNew', 'Sarabun', 'sans-serif'],
+        sans: ['ChulaCharasNew', 'sans-serif'],
+        mono: ['ChulaCharasNew', 'sans-serif'],
       },
       colors: {
         chula: {
