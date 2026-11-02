@@ -28,6 +28,8 @@ export const STEP_LABELS = Object.freeze({
     5: 'การคำนวณ SROI'
 });
 
+import { isPathwayRowComplete, isPathwayRowStarted } from './pathwayData.js';
+
 /** Typed fields, keyed by the same ids the form uses (so snapshot.fields[id] is the value). */
 const REQUIRED_FIELDS = [
     { id: 'm_projectName',          step: 1, label: 'ชื่อโครงการ' },
@@ -37,14 +39,10 @@ const REQUIRED_FIELDS = [
     { id: 'm_department',           step: 1, label: 'หน่วยงาน' },
     { id: 'm_area',                 step: 1, label: 'พื้นที่ดำเนินการ' },
 
-    { id: 'i_inputs',               step: 3, label: 'Inputs: แหล่งทุนและมูลค่าทรัพยากร' },
     { id: 'i_knowledge',            step: 3, label: 'Inputs: องค์ความรู้และทรัพยากรบุคคล' },
-    { id: 'i_stakeholders',         step: 3, label: 'ผู้มีส่วนได้ส่วนเสีย (Stakeholders)' },
     { id: 'i_activities',           step: 3, label: 'กิจกรรม (Activities)' },
     { id: 'i_output',               step: 3, label: 'Outputs: ผลผลิตที่เกิดขึ้นโดยตรง' },
     { id: 'i_output_sdg',           step: 3, label: 'Outputs: SDGs ที่เชื่อมกับผลผลิต' },
-    { id: 'i_outcome',              step: 3, label: 'Outcomes: การเปลี่ยนแปลงที่คาดหวัง' },
-    { id: 'i_outcome_stakeholders', step: 3, label: 'Outcomes: ผู้มีส่วนได้ส่วนเสียที่ได้รับผลลัพธ์' },
     { id: 'i_impact_economic',      step: 3, label: 'Impacts: มิติเศรษฐกิจ' },
     { id: 'i_impact_social',        step: 3, label: 'Impacts: มิติสังคม' },
     { id: 'i_impact_environment',   step: 3, label: 'Impacts: มิติสิ่งแวดล้อม' },
@@ -55,6 +53,13 @@ const REQUIRED_FIELDS = [
 
     { id: 'sv_key_takeaway',        step: 4, label: 'Focus Group: Key Takeaway' },
     { id: 'sv_quote',               step: 4, label: 'Quote จาก Focus Group Interview' }
+];
+
+/** Step 3's lists (data in snapshot.pathway). Labels double as the missing-item text. */
+const PATHWAY_LISTS = [
+    { kind: 'inputs',       label: 'Inputs: แหล่งทุน (ชื่อทุน / ประเภททุน / จำนวน) อย่างน้อย 1 รายการ กรอกให้ครบทุกช่อง' },
+    { kind: 'stakeholders', label: 'ผู้มีส่วนได้ส่วนเสีย: อย่างน้อย 1 กลุ่ม กรอกให้ครบทั้งชื่อและจำนวน' },
+    { kind: 'outcomes',     label: 'Outcomes: การเปลี่ยนแปลงที่คาดหวังและผู้ที่ได้รับผลลัพธ์ อย่างน้อย 1 รายการ กรอกให้ครบทั้งสองช่อง' }
 ];
 
 /** Per SROI row. Text columns must be non-blank; "positive" columns must be > 0. */
@@ -113,6 +118,11 @@ export function evaluateCompleteness(snapshot) {
 
     REQUIRED_FIELDS.filter(f => f.step === 3)
         .forEach(f => add(f.step, f.label, !isBlank(fields[f.id])));
+    // The three add-a-row lists: at least one real row, and every real row filled in whole.
+    PATHWAY_LISTS.forEach(({ kind, label }) => {
+        const started = (snap.pathway?.[kind] ?? []).filter(row => isPathwayRowStarted(kind, row));
+        add(3, label, started.length > 0 && started.every(row => isPathwayRowComplete(kind, row)));
+    });
 
     REQUIRED_FIELDS.filter(f => f.step === 4)
         .forEach(f => add(f.step, f.label, !isBlank(fields[f.id])));

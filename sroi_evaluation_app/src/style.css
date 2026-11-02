@@ -1289,3 +1289,82 @@ body.login-bg::after {
 body .leaflet-container { font-family: inherit; }
 body .leaflet-bar a,
 body .leaflet-touch .leaflet-bar a { font-family: inherit; }
+
+/* ===== Step 3: add-a-row lists (inputs / stakeholders / outcomes) =================== */
+/* One row per entry: a number, the cells, and a remove button. Phones stack the cells
+   under each other (number and remove button stay on the first line); from `md` the cells
+   sit side by side in one row, so "this change -> for these people" reads across. Column
+   labels show on every row on phones, but on larger screens only above the first row (the
+   rest keep them for screen readers only). Rows are built in src/lib/pathwayLists.js. */
+.pathway-row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 2.25rem;
+  gap: 0.5rem;
+  align-items: start;
+  padding: 0.75rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+}
+.pathway-number {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, #DA5F8E 12%, #fff);
+  color: #B83A6B;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.pathway-cell { grid-column: 2; display: block; min-width: 0; }
+.pathway-cell-label { display: block; margin-bottom: 0.25rem; font-size: 0.75rem; font-weight: 600; color: #374151; }
+.pathway-remove {
+  grid-column: 3;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  color: #9ca3af;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.pathway-remove-none { visibility: hidden; }
+.pathway-fixed {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #1f2937;
+  background: color-mix(in srgb, #DA5F8E 7%, #fff);
+  border: 1px solid color-mix(in srgb, #DA5F8E 22%, #fff);
+  border-radius: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.pathway-fixed-empty { font-weight: 400; font-style: italic; color: #9ca3af; background: #f9fafb; border-color: #e5e7eb; }
+.pathway-fixed-note { display: block; margin-top: 0.15rem; font-size: 0.75rem; font-weight: 400; color: #b45309; }
+.pathway-remove:hover:not(:disabled) { color: #ef4444; background: #fef2f2; }
+.pathway-remove:disabled { opacity: 0.4; cursor: not-allowed; }
+@media (min-width: 768px) {
+  .pathway-row { grid-template-columns: 2rem minmax(0, 1fr) minmax(0, 1fr) 2.25rem; }
+  .pathway-row-inputs { grid-template-columns: 2rem minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) 2.25rem; }
+  .pathway-row-stakeholders { grid-template-columns: 2rem minmax(0, 2fr) minmax(0, 1fr) 2.25rem; }
+  .pathway-row-outcomes { grid-template-columns: 2rem minmax(0, 1fr) minmax(0, 1.6fr) 2.25rem; }
+  .pathway-number,
+  .pathway-remove { grid-row: auto; grid-column: auto; }
+  .pathway-cell { grid-column: auto; }
+  /* The number and remove button line up with the inputs, not with the label above them. */
+  .pathway-row:first-child .pathway-number,
+  .pathway-row:first-child .pathway-remove { margin-top: 1.4rem; }
+  .pathway-row:not(:first-child) .pathway-cell-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+}

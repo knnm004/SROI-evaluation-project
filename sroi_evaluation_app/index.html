@@ -610,8 +610,15 @@
                             <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>ปัจจัยนำเข้า (Inputs)</h4>
                             <div class="space-y-4">
                                 <div>
-                                    <label class="form-label">แหล่งทุนและมูลค่าทรัพยากร</label>
-                                    <textarea id="i_inputs" rows="4" class="form-control resize-none" placeholder="เช่น แหล่งเงินทุนภายใน SiHub, แหล่งทุนภายนอก, เวลา อุปกรณ์ หรือทรัพยากรที่ใช้"></textarea>
+                                    <div class="flex items-end justify-between gap-3 flex-wrap mb-2">
+                                        <div>
+                                            <label class="form-label !mb-0.5">แหล่งทุนและมูลค่าทรัพยากร</label>
+                                            <p class="text-xs text-gray-500">กรอก 1 แหล่งทุนต่อ 1 แถว แล้วกดเพิ่มเมื่อมีแหล่งทุนถัดไป</p>
+                                        </div>
+                                        <button type="button" data-pathway-add="inputs" data-testid="pathway-inputs-add" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-chula text-white text-sm font-semibold hover:bg-chula-dark transition-colors whitespace-nowrap"><i class="fa-solid fa-plus"></i>เพิ่มแหล่งทุน</button>
+                                    </div>
+                                    <div id="pathway-inputs-list" class="space-y-3" data-testid="pathway-inputs-list"></div>
+                                    <p class="text-xs font-semibold text-chula-darker text-right mt-2 min-h-[1rem]" data-pathway-total aria-live="polite"></p>
                                 </div>
                                 <div>
                                     <label class="form-label">องค์ความรู้และทรัพยากรบุคคล</label>
@@ -622,7 +629,11 @@
 
                         <div class="form-panel hidden" data-pathway-panel="stakeholders">
                             <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-users-line mr-2"></i>ผู้มีส่วนได้ส่วนเสีย (Stakeholders)</h4>
-                            <textarea id="i_stakeholders" rows="8" class="form-control resize-none" placeholder="ระบุกลุ่มที่ได้รับผลกระทบ/เกี่ยวข้อง เช่น ชุมชน กลุ่มเป้าหมาย หน่วยงานรัฐ ผู้ร่วมทุน พร้อมจำนวนหรือระดับความเกี่ยวข้องถ้ามี"></textarea>
+                            <div class="flex items-end justify-between gap-3 flex-wrap mb-2">
+                                <p class="text-xs text-gray-500">ระบุกลุ่มที่ได้รับผลกระทบ/เกี่ยวข้อง เช่น ชุมชน กลุ่มเป้าหมาย หน่วยงานรัฐ ผู้ประกอบการ พร้อมจำนวน กรอก 1 กลุ่มต่อ 1 แถว</p>
+                                <button type="button" data-pathway-add="stakeholders" data-testid="pathway-stakeholders-add" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-chula text-white text-sm font-semibold hover:bg-chula-dark transition-colors whitespace-nowrap"><i class="fa-solid fa-plus"></i>เพิ่มผู้มีส่วนได้ส่วนเสีย</button>
+                            </div>
+                            <div id="pathway-stakeholders-list" class="space-y-3" data-testid="pathway-stakeholders-list"></div>
                         </div>
 
                         <div class="form-panel hidden" data-pathway-panel="activities">
@@ -646,16 +657,12 @@
 
                         <div class="form-panel hidden" data-pathway-panel="outcomes">
                             <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-seedling mr-2"></i>ผลลัพธ์ (Outcomes)</h4>
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="form-label">การเปลี่ยนแปลงที่คาดหวัง</label>
-                                    <textarea id="i_outcome" rows="4" class="form-control resize-none" placeholder="ระบุว่ากลุ่มเป้าหมายเปลี่ยนแปลงอย่างไร เช่น ทักษะ รายได้ พฤติกรรม คุณภาพชีวิต หรือความสามารถในการเข้าถึงบริการ"></textarea>
-                                </div>
-                                <div>
-                                    <label class="form-label">ผู้มีส่วนได้ส่วนเสียที่ได้รับผลลัพธ์</label>
-                                    <textarea id="i_outcome_stakeholders" rows="2" class="form-control resize-none" placeholder="ระบุกลุ่มที่เกิด outcome นี้โดยตรง"></textarea>
-                                </div>
+                            <div class="flex items-end justify-between gap-3 flex-wrap mb-2">
+                                <p class="text-xs text-gray-500 mb-0">รายชื่อผู้มีส่วนได้ส่วนเสียดึงมาจากแท็บ
+                                    <button type="button" onclick="appState.showPathwayPanel('stakeholders')" class="font-semibold text-chula hover:underline">Stakeholders</button>
+                                    โดยอัตโนมัติ (แก้ไขชื่อได้ที่แท็บนั้น) ระบุการเปลี่ยนแปลงที่เกิดกับแต่ละกลุ่มในแถวเดียวกัน</p>
                             </div>
+                            <div id="pathway-outcomes-list" class="space-y-3" data-testid="pathway-outcomes-list"></div>
                         </div>
 
                         <div class="form-panel hidden" data-pathway-panel="impacts">
@@ -860,7 +867,7 @@
                                 <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-xs mb-4">
                                     <div class="pb-1.5 border-b border-gray-100">
                                         <strong class="block text-[11px] text-gray-400 font-medium">Inputs</strong>
-                                        <span id="r_inputs" class="text-gray-700">-</span>
+                                        <div id="r_inputs" class="text-gray-700">-</div>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
                                         <strong class="block text-[11px] text-gray-400 font-medium">Activities</strong>
@@ -872,7 +879,7 @@
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
                                         <strong class="block text-[11px] text-gray-400 font-medium">Outcomes</strong>
-                                        <span id="r_outcome" class="text-gray-700">-</span>
+                                        <div id="r_outcome" class="text-gray-700">-</div>
                                     </div>
                                     <div class="pb-1.5 border-b border-gray-100">
                                         <strong class="block text-[11px] text-gray-400 font-medium">Impacts</strong>
