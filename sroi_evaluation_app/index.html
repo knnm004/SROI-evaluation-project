@@ -658,11 +658,13 @@
                         <div class="form-panel hidden" data-pathway-panel="outcomes">
                             <h4 class="font-bold text-chula mb-3"><i class="fa-solid fa-seedling mr-2"></i>ผลลัพธ์ (Outcomes)</h4>
                             <div class="flex items-end justify-between gap-3 flex-wrap mb-2">
-                                <p class="text-xs text-gray-500 mb-0">รายชื่อผู้มีส่วนได้ส่วนเสียดึงมาจากแท็บ
+                                <p class="text-xs text-gray-500 mb-0 max-w-2xl">ผลลัพธ์เดียวกันอาจเกิดกับผู้มีส่วนได้ส่วนเสียหลายกลุ่ม ให้ติ๊กทุกกลุ่มที่ได้รับผลลัพธ์นั้น แล้วเขียนการเปลี่ยนแปลงเพียงครั้งเดียว รายชื่อดึงมาจากแท็บ
                                     <button type="button" onclick="appState.showPathwayPanel('stakeholders')" class="font-semibold text-chula hover:underline">Stakeholders</button>
-                                    โดยอัตโนมัติ (แก้ไขชื่อได้ที่แท็บนั้น) ระบุการเปลี่ยนแปลงที่เกิดกับแต่ละกลุ่มในแถวเดียวกัน</p>
+                                    โดยอัตโนมัติ</p>
+                                <button type="button" data-pathway-add="outcomes" data-testid="pathway-outcomes-add" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-chula text-white text-sm font-semibold hover:bg-chula-dark transition-colors whitespace-nowrap"><i class="fa-solid fa-plus"></i>เพิ่มผลลัพธ์</button>
                             </div>
                             <div id="pathway-outcomes-list" class="space-y-3" data-testid="pathway-outcomes-list"></div>
+                            <p id="pathway-outcomes-hint" class="text-xs text-amber-700 mt-2 min-h-[1rem]" aria-live="polite"></p>
                         </div>
 
                         <div class="form-panel hidden" data-pathway-panel="impacts">

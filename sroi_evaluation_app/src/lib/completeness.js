@@ -59,7 +59,7 @@ const REQUIRED_FIELDS = [
 const PATHWAY_LISTS = [
     { kind: 'inputs',       label: 'Inputs: แหล่งทุน (ชื่อทุน / ประเภททุน / จำนวน) อย่างน้อย 1 รายการ กรอกให้ครบทุกช่อง' },
     { kind: 'stakeholders', label: 'ผู้มีส่วนได้ส่วนเสีย: อย่างน้อย 1 กลุ่ม กรอกให้ครบทั้งชื่อและจำนวน' },
-    { kind: 'outcomes',     label: 'Outcomes: การเปลี่ยนแปลงที่คาดหวังและผู้ที่ได้รับผลลัพธ์ อย่างน้อย 1 รายการ กรอกให้ครบทั้งสองช่อง' }
+    { kind: 'outcomes',     label: 'Outcomes: การเปลี่ยนแปลงที่คาดหวัง อย่างน้อย 1 รายการ พร้อมติ๊กผู้มีส่วนได้ส่วนเสียที่ได้รับผลลัพธ์' }
 ];
 
 /** Per SROI row. Text columns must be non-blank; "positive" columns must be > 0. */
