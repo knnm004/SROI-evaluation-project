@@ -18,8 +18,14 @@
  * reader and consumed by one writer, so they cannot drift again.
  */
 
-/** Bump when the shape changes, and extend normaliseSnapshot() to upgrade it. */
-export const SNAPSHOT_VERSION = 2;
+import { emptyPathway, normalisePathway, pathwayFromLegacyFields, pathwayHasContent } from './pathwayData.js';
+
+/**
+ * Bump when the shape changes, and extend normaliseSnapshot() to upgrade it.
+ *   3: `pathway` (the add-a-row lists of step 3) replaced the free-text fields
+ *      i_inputs / i_stakeholders / i_outcome / i_outcome_stakeholders.
+ */
+export const SNAPSHOT_VERSION = 3;
 
 /**
  * Fields inside #view-app that are UI state, not project data.
@@ -61,6 +67,8 @@ export function serialiseAssessment(state) {
         sroiRows: state.sroiRows,
         uploadedImage: state.uploadedImage ?? null,
         activityImages: state.activityImages ?? [],
+        // The inputs / stakeholders / outcomes lists. Copied, so later typing cannot change a snapshot already taken.
+        pathway: normalisePathway(state.pathwayRows ?? emptyPathway()),
         // What the person said at the recheck-and-save screen: true = "filled in completely",
         // false = "still unfinished", null = never asked (projects saved before the switch
         // existed). Optional on purpose, so older rows need no migration and no version bump.
@@ -119,6 +127,9 @@ export function deserialiseAssessment(snapshot, state) {
     state.uploadedImage = state.activityImages.find(image => image.src)?.src ?? snapshot.uploadedImage ?? null;
     state.renderActivityPhotoSlots?.();
 
+    state.pathwayRows = normalisePathway(snapshot.pathway);
+    state.renderPathwayLists?.();
+
     state.filterSDGs();
 
     // Rebuild the map from the restored lat/lng/bounds fields. Without this the
@@ -147,7 +158,11 @@ export function deserialiseAssessment(snapshot, state) {
  */
 export function normaliseSnapshot(raw) {
     if (!raw) return null;
-    if (Number(raw.version) >= 2) return raw;
+    if (Number(raw.version) >= 3) return raw;
+    if (Number(raw.version) === 2) {
+        // v2 -> v3: the four pathway text boxes become lists (the text is carried over).
+        return { ...raw, version: SNAPSHOT_VERSION, pathway: raw.pathway ?? pathwayFromLegacyFields(raw.fields) };
+    }
 
     const { sdgs = [], uploadedImage = null, ...legacyFields } = raw.inputs ?? {};
 
@@ -161,6 +176,7 @@ export function normaliseSnapshot(raw) {
         fields: legacyFields,
         selectedSDGs: Array.isArray(sdgs) ? sdgs : [],
         sdgReasons: {},
+        pathway: pathwayFromLegacyFields(legacyFields),
         sroiRows: recoveredRows,
         uploadedImage,
         activityImages: uploadedImage ? [{ src: uploadedImage }] : [],
@@ -227,5 +243,6 @@ export function hasMeaningfulContent(snapshot) {
     if (snapshot.uploadedImage) return true;
     if ((snapshot.activityImages ?? []).some(image => image?.src)) return true;
     if ((snapshot.sroiRows ?? []).some(isSROIRowStarted)) return true;
+    if (pathwayHasContent(snapshot.pathway)) return true;
     return Object.values(snapshot.fields ?? {}).some(value => String(value ?? '').trim() !== '');
 }

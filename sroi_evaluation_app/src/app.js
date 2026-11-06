@@ -18,6 +18,14 @@ import {
 } from './lib/assessmentSnapshot.js';
 import { initLandingStats } from './lib/landingStats.js';
 import { evaluateCompleteness, STEP_LABELS } from './lib/completeness.js';
+import { emptyPathway } from './lib/pathwayData.js';
+import {
+    initPathwayLists,
+    renderPathwayLists,
+    updatePathwayControls,
+    refreshOutcomes,
+    pathwayReportHTML
+} from './lib/pathwayLists.js';
 import { initLandingSections } from './lib/landingSections.js';
 import { initLandingPhotoWall } from './lib/landingPhotoWall.js';
 
@@ -304,6 +312,8 @@ export const appState = {
     uploadedImage: null,
     activityImages: [],
     isViewMode: false,
+    // The add-a-row lists of step 3 (inputs / stakeholders / outcomes); shape in lib/pathwayData.js.
+    pathwayRows: emptyPathway(),
     /** The switch in the recheck modal, as last saved: true/false, or null = never asked. */
     declaredComplete: null,
     // Has the user actually changed anything THIS session, as opposed to just having
@@ -641,6 +651,9 @@ export const appState = {
 
     init() {
         this.sroiRows = [this.createSROIRow()];
+        this.pathwayRows = emptyPathway();
+        initPathwayLists(this);
+        this.renderPathwayLists();
         this.renderObjectiveInputs();
         this.renderActivityPhotoSlots();
         this.renderSDGs();
@@ -780,6 +793,7 @@ export const appState = {
         this.uploadedImage = null;
         this.activityImages = [];
         this.sroiRows = [];
+        this.pathwayRows = emptyPathway();
         this.isViewMode = false;
         this.declaredComplete = null;
 
@@ -980,6 +994,9 @@ export const appState = {
             if (button) button.setAttribute('aria-label', `ลบวัตถุประสงค์ข้อที่ ${index + 1}`);
         });
     },
+
+    renderPathwayLists() { renderPathwayLists(this); },
+    updatePathwayControls() { updatePathwayControls(this); },
 
     updateObjectiveRemoveButtons() {
         const rows = document.querySelectorAll('.objective-row');
@@ -1205,6 +1222,7 @@ export const appState = {
         }
 
         this.updateObjectiveRemoveButtons();
+        this.updatePathwayControls();
         this.updateLiveSummary();
         if (this.currentStep === 1) {
             window.setTimeout(() => this.initAreaMap(), 0);
@@ -1261,6 +1279,7 @@ export const appState = {
     },
 
     showPathwayPanel(panelId) {
+        if (panelId === 'outcomes') refreshOutcomes(this);
         document.querySelectorAll('[data-pathway-panel]').forEach(panel => {
             panel.classList.toggle('hidden', panel.dataset.pathwayPanel !== panelId);
         });
@@ -3278,14 +3297,14 @@ export const appState = {
             sdgContainer.innerHTML = '<span class="text-gray-500 italic">ไม่ได้ระบุ</span>';
         }
 
-        this.setText('r_inputs', this.getValue('i_inputs'));
+        const inputsEl = document.getElementById('r_inputs');
+        if (inputsEl) inputsEl.innerHTML = pathwayReportHTML('inputs', this.pathwayRows.inputs);
         this.setText('r_knowledge', this.getValue('i_knowledge'));
-        this.setText('r_stakeholders', this.getValue('i_stakeholders'));
         this.setText('r_activities', this.getValue('i_activities'));
         this.setText('r_output', this.getValue('i_output'));
         this.setText('r_output_sdg', this.getValue('i_output_sdg'));
-        this.setText('r_outcome', this.getValue('i_outcome'));
-        this.setText('r_outcome_stakeholders', this.getValue('i_outcome_stakeholders'));
+        const outcomeEl = document.getElementById('r_outcome');
+        if (outcomeEl) outcomeEl.innerHTML = pathwayReportHTML('outcomes', this.pathwayRows.outcomes);
         this.setText('r_impact_economic', this.getValue('i_impact_economic'));
         this.setText('r_impact_social', this.getValue('i_impact_social'));
         this.setText('r_impact_environment', this.getValue('i_impact_environment'));
@@ -3831,6 +3850,7 @@ function initializeNewProject(identity, fresh) {
         appState.uploadedImage = null;
         appState.activityImages = [];
         appState.sroiRows = [appState.createSROIRow()];
+        appState.pathwayRows = emptyPathway();
         appState.isViewMode = false;
         appState.pendingMembers = [];
 
@@ -3847,6 +3867,7 @@ function initializeNewProject(identity, fresh) {
         appState.updateKeyTakeawayCounter();
         appState.renderActivityPhotoSlots();
         appState.renderSROIRows();
+        appState.renderPathwayLists();
         appState.updateSelectedSDGs();
     } else {
         appState.isViewMode = false;

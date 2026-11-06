@@ -85,6 +85,8 @@ Vanilla JS + Vite multi-page app. No framework, no router, no state library.
 - `normaliseSnapshot(raw)` — upgrades the pre-2026-07 shape (`{ inputs, sroiCalculations }`) and **recovers raw SROI rows from `sroiCalculations.rows[].row`**. Do not remove this: without it a legacy project loads with an empty SROI table and the next save writes zeros over real results.
 - `buildProjectPayload(state)` — snapshot + computed `sroiCalculations` (derived, ignored on load).
 
+**Step 3 lists (`SNAPSHOT_VERSION` 3).** Inputs (แหล่งทุน), stakeholders and outcomes are add-a-row lists stored under `snapshot.pathway` (`{ inputs:[{name,type,amount}], stakeholders:[{name,count}], outcomes:[{change,stakeholders}] }`), not as `i_*` fields — their row inputs deliberately have no `id` so the field sweep skips them. Shape and helpers: `src/lib/pathwayData.js`; DOM: `src/lib/pathwayLists.js`. `normaliseSnapshot()` turns the old `i_inputs` / `i_stakeholders` / `i_outcome` / `i_outcome_stakeholders` text into rows (v1 and v2 rows), so don't remove that.
+
 Bump `SNAPSHOT_VERSION` and extend `normaliseSnapshot()` when changing the shape.
 
 **Fixed here, worth not reintroducing:** `nextStep()` used to call `saveProjectData({projectName, currentStep})` on every step advance, overwriting the whole `assessment_data` column. It now saves a local draft only; server writes happen exclusively in `confirmAndSave()`.
