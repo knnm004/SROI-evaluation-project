@@ -779,7 +779,10 @@
                             <option value="เดือน"></option><option value="พื้นที่"></option><option value="โรงเรียน"></option>
                             <option value="แห่ง"></option><option value="หน่วย"></option>
                         </datalist>
-                        <div id="sroi-rows-container" class="space-y-4"></div>
+                        <div class="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_12rem] lg:gap-5 items-stretch lg:items-start">
+                            <div id="sroi-rows-container" class="space-y-4 min-w-0"></div>
+                            <nav id="sroi-row-rail" class="sroi-rail" aria-label="รายการ outcome rows"></nav>
+                        </div>
 
                         <div id="sroi-validation-panel" class="sroi-validation-panel">
                             <div class="flex items-start gap-3">

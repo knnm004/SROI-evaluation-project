@@ -1439,3 +1439,31 @@ body .leaflet-touch .leaflet-bar a { font-family: inherit; }
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
 }
+
+/* Step 5: right-hand rail with one block per outcome row (jump + add). */
+.sroi-row { scroll-margin-top: 6rem; }
+.sroi-rail {
+    @apply lg:sticky lg:top-24 flex lg:flex-col gap-3 lg:gap-0 overflow-x-auto lg:overflow-visible lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto pb-2 lg:pb-0 order-first lg:order-none mb-4 lg:mb-0;
+}
+.sroi-rail-title { @apply hidden lg:block text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2 pl-4; }
+.sroi-rail-list { @apply flex lg:flex-col gap-2 lg:gap-0 lg:border-l-2 lg:border-gray-200 lg:ml-2; }
+.sroi-rail-item {
+    @apply relative text-left rounded-lg border border-gray-200 bg-white px-3 py-2 min-w-[5.5rem] lg:min-w-0 lg:ml-4 lg:mb-2 hover:border-chula transition-colors;
+}
+.sroi-rail-item::before {
+    content: '';
+    @apply hidden lg:block absolute -left-[1.4rem] top-4 w-2.5 h-2.5 rounded-full bg-white border-2 border-gray-300;
+}
+.sroi-rail-item-active { @apply border-chula bg-chula bg-opacity-5; }
+.sroi-rail-item-active::before { @apply border-chula bg-chula; }
+.sroi-rail-num { @apply text-[11px] font-bold text-chula-darker; }
+.sroi-rail-name { @apply block text-xs font-semibold text-gray-800 leading-snug; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sroi-rail-pv { @apply block text-[11px] text-gray-500 font-mono; }
+.sroi-rail-add {
+    @apply flex items-center gap-2 text-left rounded-lg border-2 border-dashed border-gray-300 px-3 py-2 min-w-[8rem] lg:min-w-0 lg:ml-4 text-xs font-semibold text-gray-500 hover:border-chula hover:text-chula transition-colors relative;
+}
+.sroi-rail-add::before {
+    content: '';
+    @apply hidden lg:block absolute -left-[1.4rem] top-1/2 -mt-1.5 w-2.5 h-2.5 rounded-full bg-white border-2 border-gray-300;
+}
+.sroi-rail-add-icon { @apply flex items-center justify-center w-6 h-6 rounded-full bg-chula text-white text-sm leading-none; }

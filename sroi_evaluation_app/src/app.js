@@ -2882,6 +2882,12 @@ export const appState = {
         // value was a real user edit and must be preserved exactly.
         const legacyDiscountRateUntouched = isLegacyShape && Number(overrides.discountRate) === 3.5;
 
+        // Several outcomes/impacts can be ticked per row. Older rows kept one text (or an old "Output").
+        const legacyText = overrides.pathwayOutcome || overrides.outputSummary || '';
+        const legacyOutcomes = Array.isArray(overrides.pathwayOutcomes)
+            ? overrides.pathwayOutcomes.filter(Boolean)
+            : (legacyText ? [legacyText] : []);
+
         return {
             id: overrides.id || `sroi_${Date.now()}_${Math.random().toString(16).slice(2)}`,
             stakeholderGroup: overrides.stakeholderGroup || '',
@@ -2893,7 +2899,8 @@ export const appState = {
             // No longer asked in step 5 (inputs live in step 3); kept so old rows lose nothing.
             inputDescription: overrides.inputDescription || '',
             // The outcome/impact picked from step 3. Old rows typed an "Output" here instead.
-            pathwayOutcome: overrides.pathwayOutcome || overrides.outputSummary || '',
+            pathwayOutcomes: legacyOutcomes,
+            pathwayOutcome: legacyOutcomes.join('; '), // the ticked ones, joined: what titles, reports and checks read
             // Cost is project-level now (step 3's funding total); only old rows hold their own.
             investment: overrides.investment ?? 0,
             quantity: overrides.quantity ?? 0,
@@ -2988,7 +2995,7 @@ export const appState = {
                                 </div>
                                 <div>
                                     <label class="form-label">Outcome ที่สร้างผลลัพธ์และผลกระทบ</label>
-                                    ${this.renderRowOutcomeSelect(row)}
+                                    ${this.renderRowOutcomeChecks(row)}
                                 </div>
                             </div>
                         </div>
@@ -3162,31 +3169,51 @@ export const appState = {
         return { outcomes, impacts };
     },
 
-    renderRowOutcomeSelect(row) {
+    // Tick any number of outcomes/impacts from step 3 for this row.
+    renderRowOutcomeChecks(row) {
         const { outcomes, impacts } = this.getOutcomeOptions();
         const known = new Set([...outcomes, ...impacts].map(item => item.text));
-        const option = (text, label = text) => `<option value="${this.escapeHTML(text)}" ${row.pathwayOutcome === text ? 'selected' : ''}>${this.escapeHTML(label)}</option>`;
-        const legacy = row.pathwayOutcome && !known.has(row.pathwayOutcome) ? option(row.pathwayOutcome, `(ข้อความเดิม) ${row.pathwayOutcome}`) : '';
-        const groups = [
-            outcomes.length ? `<optgroup label="Outcome (ผลลัพธ์)">${outcomes.map(item => option(item.text)).join('')}</optgroup>` : '',
-            impacts.length ? `<optgroup label="Impact (ผลกระทบ)">${impacts.map(item => option(item.text, `${item.text} (${item.group})`)).join('')}</optgroup>` : ''
+        const chosen = new Set(row.pathwayOutcomes);
+        const box = (text, label = text) => `
+            <label class="pathway-check">
+                <input type="checkbox" data-outcome-text="${this.escapeHTML(text)}" ${chosen.has(text) ? 'checked' : ''} onchange="appState.toggleRowOutcome('${row.id}', this.dataset.outcomeText, this.checked)">
+                <span>${this.escapeHTML(label)}</span>
+            </label>`;
+        const heading = title => `<p class="text-[11px] font-bold text-gray-400 mt-1">${title}</p>`;
+        // Typed text from before this was a list (or an item since removed in step 3) stays ticked until unticked.
+        const legacy = row.pathwayOutcomes.filter(text => !known.has(text)).map(text => box(text, `(ข้อความเดิม) ${text}`)).join('');
+        const body = [
+            legacy,
+            outcomes.length ? heading('Outcome (ผลลัพธ์)') + outcomes.map(item => box(item.text)).join('') : '',
+            impacts.length ? heading('Impact (ผลกระทบ)') + impacts.map(item => box(item.text, `${item.text} (${item.group})`)).join('') : ''
         ].join('');
-        return `<select class="form-control" onchange="appState.selectRowOutcome('${row.id}', this.value)">
-                <option value="" ${row.pathwayOutcome ? '' : 'selected'}>-- เลือกจาก Impact Pathway --</option>${legacy}${groups}</select>
-            <p class="text-xs text-gray-500 mt-1">${outcomes.length || impacts.length
-                ? 'รายการดึงมาจากขั้นที่ 3 (Outcomes และ Impacts) — เลือกแล้วระบบติ๊กผู้มีส่วนได้ส่วนเสียของ outcome นั้นให้ (แก้ได้)'
-                : 'ยังไม่มี Outcome/Impact ในขั้นที่ 3 — กรอกที่ขั้นที่ 3 ก่อน แล้วกลับมาเลือกที่นี่'}</p>`;
+        if (!body.trim()) {
+            return `<div class="proxy-manual-panel text-sm text-gray-600">ยังไม่มี Outcome/Impact ในขั้นที่ 3
+                <button type="button" class="block mt-2 text-chula font-semibold" onclick="appState.goToStep(3); appState.showPathwayPanel('outcomes')">ไปกรอกที่ขั้นที่ 3 &rarr;</button></div>`;
+        }
+        return `<div class="pathway-checks" role="group">${body}</div>
+            <p class="text-xs text-gray-500 mt-1">เลือกได้หลายรายการ จากขั้นที่ 3 (Outcomes และ Impacts) — ระบบติ๊กผู้มีส่วนได้ส่วนเสียของ outcome ที่เลือกให้ (แก้ได้)</p>`;
     },
 
-    selectRowOutcome(rowId, text) {
+    toggleRowOutcome(rowId, text, checked) {
         const row = this.sroiRows.find(item => item.id === rowId);
         if (!row) return;
-        row.pathwayOutcome = text;
-        const match = this.getOutcomeOptions().outcomes.find(item => item.text === text);
-        if (match?.stakeholderIds.length) {
-            row.stakeholderIds = [...match.stakeholderIds];
-            row.quantity = this.getRowQuantity(row);
+        const outcomes = this.getOutcomeOptions().outcomes;
+        const stakeholdersOf = value => outcomes.find(item => item.text === value)?.stakeholderIds ?? [];
+        const ids = new Set(row.stakeholderIds);
+
+        if (checked) {
+            if (!row.pathwayOutcomes.includes(text)) row.pathwayOutcomes.push(text);
+            stakeholdersOf(text).forEach(id => ids.add(id));
+        } else {
+            row.pathwayOutcomes = row.pathwayOutcomes.filter(item => item !== text);
+            // Drop this outcome's stakeholders unless another ticked outcome still has them.
+            const stillNeeded = new Set(row.pathwayOutcomes.flatMap(stakeholdersOf));
+            stakeholdersOf(text).forEach(id => { if (!stillNeeded.has(id)) ids.delete(id); });
         }
+        row.pathwayOutcome = row.pathwayOutcomes.join('; ');
+        row.stakeholderIds = [...ids];
+        row.quantity = this.getRowQuantity(row);
         this.renderSROIRows();
         this.scheduleSave();
         this.updateLiveSummary();
@@ -3280,11 +3307,70 @@ export const appState = {
         `;
     },
 
+    // Right-hand rail: one block per outcome row (jump to it) and a "+" to add another.
+    renderSROIRail() {
+        const rail = document.getElementById('sroi-row-rail');
+        if (!rail) return;
+        // A removed row's id can linger here; fall back to the first row.
+        const activeId = this.sroiRows.some(row => row.id === this.sroiRailActiveId) ? this.sroiRailActiveId : this.sroiRows[0]?.id;
+        const blocks = this.sroiRows.map((row, index) => {
+            return `
+                <button type="button" class="sroi-rail-item ${row.id === activeId ? 'sroi-rail-item-active' : ''}" data-rail-row="${row.id}" onclick="appState.jumpToSROIRow('${row.id}')">
+                    <span class="sroi-rail-num">Row ${index + 1}</span>
+                </button>`;
+        }).join('');
+        rail.innerHTML = `
+            <p class="sroi-rail-title">Outcome rows</p>
+            <div class="sroi-rail-list">
+                ${blocks}
+                <button type="button" class="sroi-rail-add" onclick="appState.addSROIRow()" aria-label="เพิ่ม outcome row">
+                    <span class="sroi-rail-add-icon">+</span>เพิ่ม outcome row
+                </button>
+            </div>`;
+        this.attachSROIRailScrollSpy();
+    },
+
+    jumpToSROIRow(rowId) {
+        const details = document.querySelector(`details.sroi-row[data-row-id="${rowId}"]`);
+        if (!details) return;
+        details.open = true;
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.setSROIRailActive(rowId);
+    },
+
+    setSROIRailActive(rowId) {
+        if (this.sroiRailActiveId === rowId) return;
+        this.sroiRailActiveId = rowId;
+        document.querySelectorAll('[data-rail-row]').forEach(el => {
+            el.classList.toggle('sroi-rail-item-active', el.dataset.railRow === rowId);
+        });
+    },
+
+    // Highlight the row nearest the top of the screen as the page scrolls. Registered once.
+    attachSROIRailScrollSpy() {
+        if (this.sroiRailScrollAttached) return;
+        this.sroiRailScrollAttached = true;
+        let frame = null;
+        window.addEventListener('scroll', () => {
+            if (frame) return;
+            frame = requestAnimationFrame(() => {
+                frame = null;
+                const rows = [...document.querySelectorAll('details.sroi-row')];
+                if (!rows.length || document.getElementById('step-5')?.classList.contains('hidden')) return;
+                const current = rows.filter(el => el.getBoundingClientRect().top <= 140).pop() || rows[0];
+                this.setSROIRailActive(current.dataset.rowId);
+            });
+        }, { passive: true });
+    },
+
     addSROIRow() {
-        this.sroiRows.push(this.createSROIRow());
+        const row = this.createSROIRow();
+        this.sroiRows.push(row);
+        this.sroiRailActiveId = row.id;
         this.renderSROIRows();
         this.scheduleSave();
         this.updateLiveSummary();
+        this.jumpToSROIRow(row.id);
     },
 
     removeSROIRow(rowId) {
@@ -3719,6 +3805,7 @@ export const appState = {
         if (npvEl) npvEl.innerText = `${this.formatMoney(calc.netPresentValue)} บาท`;
         this.updateFormulaBreakdown(calc);
         this.updateYearlyTables(calc);
+        this.renderSROIRail();
         this.updateLiveSummary();
     },
 
