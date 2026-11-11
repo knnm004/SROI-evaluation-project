@@ -218,23 +218,26 @@ const parseNumberValue = value => parseFloat(value) || 0;
 export function isSROIRowStarted(row) {
     const textFields = [
         'stakeholderGroup',
+        'stakeholderType',
         'inputDescription',
         'outputSummary',
+        'pathwayOutcome',
         'changeDepth',
-        'weighting',
         'outcomeDescription',
         'valuationApproach',
+        'proxyType',
         'indicatorSource'
     ];
     const moneyFields = ['groupSize', 'investment', 'quantity', 'monetaryValue'];
     const adjustmentFields = ['deadweight', 'displacement', 'attribution', 'dropoff'];
 
     return textFields.some(field => String(row[field] ?? '').trim())
+        || (row.stakeholderIds ?? []).length > 0
         || moneyFields.some(field => parseNumberValue(row[field]) > 0)
         || adjustmentFields.some(field => parseNumberValue(row[field]) > 0)
         || parseNumberValue(row.duration) !== 1
-        || parseNumberValue(row.discountRate) !== 3.5
-        || row.outcomeStart !== 'period-activity';
+        || parseNumberValue(row.discountRate) !== 2.42
+        || parseNumberValue(row.startYear) !== 0;
 }
 
 export function hasMeaningfulContent(snapshot) {

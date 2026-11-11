@@ -772,6 +772,13 @@
                             </div>
                         </div>
 
+                        <datalist id="sroi-unit-options">
+                            <option value="คน"></option><option value="ครัวเรือน"></option><option value="ราย"></option>
+                            <option value="ไร่"></option><option value="กก."></option><option value="ตัว"></option>
+                            <option value="ครั้ง"></option><option value="ชั่วโมง"></option><option value="วัน"></option>
+                            <option value="เดือน"></option><option value="พื้นที่"></option><option value="โรงเรียน"></option>
+                            <option value="แห่ง"></option><option value="หน่วย"></option>
+                        </datalist>
                         <div id="sroi-rows-container" class="space-y-4"></div>
 
                         <div id="sroi-validation-panel" class="sroi-validation-panel">
@@ -784,11 +791,11 @@
                             </div>
                         </div>
 
-                        <details class="sroi-section">
+                        <details id="formula-admin-panel" class="sroi-section hidden">
                             <summary class="cursor-pointer list-none">
                                 <div class="flex items-center justify-between gap-3">
                                     <h4 class="font-bold text-gray-900"><i class="fa-solid fa-square-root-variable text-chula mr-2"></i>ดูสูตรและตาราง PV รายปี</h4>
-                                    <span class="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1">optional</span>
+                                    <span class="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1">เฉพาะแอดมิน</span>
                                 </div>
                             </summary>
                             <div id="formula-breakdown" class="mt-4"></div>
