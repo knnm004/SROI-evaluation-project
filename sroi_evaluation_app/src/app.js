@@ -3583,22 +3583,26 @@ export const appState = {
         const startOffset = Math.max(0, Math.min(5, Math.round(this.parseNumberValue(row.startYear) || 0)));
         const adjustedAnnualValue = quantity * monetaryValue * (1 - deadweight) * (1 - displacement) * (1 - attribution);
         const yearlyValues = [];
+        const benefitYearly = []; // after adjustments and drop-off, before discounting
         let totalPV = 0;
 
         for (let calendarYear = 0; calendarYear < 6; calendarYear++) {
             if (calendarYear < startOffset) {
                 yearlyValues.push(0);
+                benefitYearly.push(0);
                 continue;
             }
 
             const activeYear = calendarYear - startOffset;
             if (activeYear >= duration) {
                 yearlyValues.push(0);
+                benefitYearly.push(0);
                 continue;
             }
 
             const droppedValue = adjustedAnnualValue * Math.pow(1 - dropoff, activeYear);
             const presentValue = droppedValue / Math.pow(1 + discountRate, calendarYear);
+            benefitYearly.push(droppedValue);
             yearlyValues.push(presentValue);
             totalPV += presentValue;
         }
@@ -3616,6 +3620,7 @@ export const appState = {
             startOffset,
             adjustedAnnualValue,
             yearlyValues,
+            benefitYearly,
             totalPV
         };
     },
@@ -3627,15 +3632,81 @@ export const appState = {
         const adjustedAnnualValue = rows.reduce((sum, row) => sum + row.adjustedAnnualValue, 0);
         const yearlyValues = Array.from({ length: 6 }, (_, index) => rows.reduce((sum, row) => sum + row.yearlyValues[index], 0));
 
+        const benefitYearly = Array.from({ length: 6 }, (_, index) => rows.reduce((sum, row) => sum + row.benefitYearly[index], 0));
+
         return {
             rows,
             investment,
             adjustedAnnualValue,
+            benefitYearly,
             totalPV,
             netPresentValue: totalPV - investment,
             sroiRatio: investment > 0 ? totalPV / investment : 0,
             yearlyValues
         };
+    },
+
+    // Year-by-year table in the shape of the ARM workbooks (t across the top): cost at t=0,
+    // each outcome row's benefit after adjustments, the discount factor, and its present value.
+    // Shown to everyone -- it is a result, unlike the formula text, which stays admin-only.
+    renderYearlyTable(calc = this.calculateSROI()) {
+        const years = [0, 1, 2, 3, 4, 5];
+        const cell = (value, cls = '') => `<td class="px-2 py-1.5 text-right font-mono whitespace-nowrap ${cls}">${value ? this.formatMoney(value) : '<span class="text-gray-300">-</span>'}</td>`;
+        const rate = calc.rows.length && calc.rows.every(r => r.discountRate === calc.rows[0].discountRate) ? calc.rows[0].discountRate : null;
+        const label = (result, index) => {
+            const names = this.rowStakeholderNames(result.row);
+            const name = result.row.pathwayOutcome || result.row.outcomeDescription || result.row.stakeholderGroup || `Outcome row ${index + 1}`;
+            return `<span class="font-semibold">${this.escapeHTML(name)}</span>${names.length ? `<span class="block text-gray-500">${this.escapeHTML(names.join(', '))}</span>` : ''}`;
+        };
+        const section = title => `<tr class="bg-gray-100"><td class="px-2 py-1.5 font-bold text-gray-800" colspan="${years.length + 2}">${title}</td></tr>`;
+        const totalRow = (title, values, total, cls = 'bg-white font-bold') =>
+            `<tr class="border-t ${cls}"><td class="px-2 py-1.5">${title}</td>${values.map(v => cell(v)).join('')}${cell(total, 'font-bold')}</tr>`;
+
+        const costValues = years.map(y => (y === 0 ? calc.investment : 0));
+        const benefitRows = calc.rows.map((result, index) => `
+            <tr class="border-t"><td class="px-2 py-1.5">${label(result, index)}</td>${result.benefitYearly.map(v => cell(v)).join('')}${cell(result.benefitYearly.reduce((a, b) => a + b, 0), 'font-semibold')}</tr>`).join('');
+        const pvRows = calc.rows.map((result, index) => `
+            <tr class="border-t"><td class="px-2 py-1.5">${label(result, index)}</td>${result.yearlyValues.map(v => cell(v)).join('')}${cell(result.totalPV, 'font-semibold')}</tr>`).join('');
+        const factorRow = rate === null
+            ? `<tr class="border-t"><td class="px-2 py-1.5" colspan="${years.length + 2}">Present value factor: แต่ละแถวใช้ discount rate ไม่เท่ากัน</td></tr>`
+            : `<tr class="border-t"><td class="px-2 py-1.5">Present value factor (discount rate ${(rate * 100).toFixed(2)}%)</td>${years.map(y => `<td class="px-2 py-1.5 text-right font-mono">${(1 / Math.pow(1 + rate, y)).toFixed(4)}</td>`).join('')}<td></td></tr>`;
+
+        if (!calc.rows.length) {
+            return '<p class="text-sm text-gray-500 italic">ยังไม่มี outcome row ที่นำมาคำนวณ</p>';
+        }
+        return `
+            <div class="overflow-x-auto border border-gray-200 rounded-xl bg-white">
+                <table class="w-full text-xs">
+                    <thead class="bg-white">
+                        <tr>
+                            <th class="px-2 py-2 text-left">รายการ (บาท)</th>
+                            ${years.map(y => `<th class="px-2 py-2 text-right whitespace-nowrap">ปีที่ ${y}</th>`).join('')}
+                            <th class="px-2 py-2 text-right">รวม</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${section('ต้นทุนโครงการ (Cost)')}
+                        ${totalRow('ต้นทุนรวมจากแหล่งทุน (ลงทุนที่ปีที่ 0)', costValues, calc.investment)}
+                        ${section('ผลประโยชน์หลังปรับ Deadweight / Displacement / Attribution / Drop-off (ก่อนคิดมูลค่าปัจจุบัน)')}
+                        ${benefitRows}
+                        ${totalRow('รวมผลประโยชน์', calc.benefitYearly, calc.benefitYearly.reduce((a, b) => a + b, 0))}
+                        ${section('มูลค่าปัจจุบันของผลประโยชน์ (Present Value)')}
+                        ${factorRow}
+                        ${pvRows}
+                        ${totalRow('รวมมูลค่าปัจจุบัน (Total PV)', calc.yearlyValues, calc.totalPV)}
+                        <tr class="border-t bg-gray-50 font-bold"><td class="px-2 py-2">NPV = Total PV − ต้นทุน</td><td class="px-2 py-2 text-right font-mono" colspan="${years.length + 1}">${this.formatMoney(calc.netPresentValue)}</td></tr>
+                        <tr class="border-t bg-chula bg-opacity-10 font-bold"><td class="px-2 py-2">SROI ratio = Total PV ÷ ต้นทุน</td><td class="px-2 py-2 text-right font-mono" colspan="${years.length + 1}">1 : ${calc.sroiRatio.toFixed(2)}</td></tr>
+                    </tbody>
+                </table>
+            </div>`;
+    },
+
+    updateYearlyTables(calc) {
+        const html = this.renderYearlyTable(calc);
+        ['sroi-yearly-table', 'r_yearly_table'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
     },
 
     calculateSROIPreview() {
@@ -3647,6 +3718,7 @@ export const appState = {
         if (pvEl) pvEl.innerText = `${this.formatMoney(calc.totalPV)} บาท`;
         if (npvEl) npvEl.innerText = `${this.formatMoney(calc.netPresentValue)} บาท`;
         this.updateFormulaBreakdown(calc);
+        this.updateYearlyTables(calc);
         this.updateLiveSummary();
     },
 
@@ -3760,7 +3832,7 @@ export const appState = {
             return `
             <tr class="border-t">
                 <td class="px-2 py-1">Row ${rowNumber}</td>
-                <td class="px-2 py-1">${this.escapeHTML(result.row.stakeholderGroup || result.row.outcomeDescription || '-')}</td>
+                <td class="px-2 py-1">${this.escapeHTML(result.row.pathwayOutcome || this.rowStakeholderNames(result.row).join(', ') || result.row.outcomeDescription || '-')}</td>
                 <td class="px-2 py-1 text-right font-mono">${this.formatMoney(result.adjustedAnnualValue)}</td>
                 <td class="px-2 py-1 text-right font-mono">${this.formatMoney(result.totalPV)}</td>
             </tr>
@@ -3868,6 +3940,7 @@ export const appState = {
         this.setText('r_quote', this.getValue('sv_quote') || 'ไม่มีข้อมูลสัมภาษณ์');
 
         const calc = this.calculateSROI();
+        this.updateYearlyTables(calc);
         const rowContainer = document.getElementById('r_sroi_rows');
         if (rowContainer) {
             rowContainer.innerHTML = calc.rows.map((result, index) => `
