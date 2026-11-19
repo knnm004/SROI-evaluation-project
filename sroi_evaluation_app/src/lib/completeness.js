@@ -29,6 +29,7 @@ export const STEP_LABELS = Object.freeze({
 });
 
 import { isPathwayRowComplete, isPathwayRowStarted } from './pathwayData.js';
+import { rowQuantity } from './sroiRowData.js';
 
 /** Typed fields, keyed by the same ids the form uses (so snapshot.fields[id] is the value). */
 const REQUIRED_FIELDS = [
@@ -64,22 +65,15 @@ const PATHWAY_LISTS = [
 
 /** Per SROI row. Text columns must be non-blank; "positive" columns must be > 0. */
 const ROW_TEXT = [
-    ['stakeholderGroup',   'กลุ่มผู้ได้รับผลกระทบ'],
-    ['inputDescription',   'สิ่งที่ลงทุน/สนับสนุน'],
-    ['outputSummary',      'Output เชิงตัวเลข'],
+    ['pathwayOutcome',     'Outcome ที่สร้างผลลัพธ์และผลกระทบ'],
     ['changeDepth',        'จำนวน/ระดับการเปลี่ยนแปลงต่อคน'],
     ['outcomeDescription', 'Outcome description'],
     ['valuationApproach',  'Valuation approach / financial proxy'],
     ['indicatorSource',    'Indicator และแหล่งข้อมูล']
 ];
 const ROW_POSITIVE = [
-    ['groupSize',     'จำนวนคนในกลุ่มทั้งหมด'],
-    ['investment',    'มูลค่าการลงทุนรวม'],
-    ['quantity',      'จำนวนผู้ได้รับ outcome'],
-    ['monetaryValue', 'มูลค่าต่อคนต่อปี']
+    ['monetaryValue', 'มูลค่าที่เป็นตัวเงินต่อหนึ่งหน่วยผลลัพธ์']
 ];
-// 1-10 per the input's own min/max; blank means "not provided".
-const ROW_WEIGHTING = ['weighting', 'น้ำหนักความสำคัญ (1-10)'];
 
 const isBlank = value => String(value ?? '').trim() === '';
 const toNumber = value => {
@@ -134,13 +128,15 @@ export function evaluateCompleteness(snapshot) {
     add(5, 'มีข้อมูล SROI อย่างน้อย 1 แถว', startedRows.length > 0);
 
     startedRows.forEach((row, index) => {
+        // Who receives the outcome comes from step 3's stakeholders (their head-counts give
+        // the quantity); rows from before that keep their own typed group and quantity.
+        const quantity = rowQuantity(row, snap.pathway);
+        const hasStakeholder = (row.stakeholderIds ?? []).length > 0 || !isBlank(row.stakeholderGroup);
         const gaps = [
-            ...ROW_TEXT.filter(([key]) => isBlank(row[key])),
-            ...ROW_POSITIVE.filter(([key]) => toNumber(row[key]) <= 0),
-            ...(() => {
-                const w = row[ROW_WEIGHTING[0]];
-                return isBlank(w) || toNumber(w) < 1 || toNumber(w) > 10 ? [ROW_WEIGHTING] : [];
-            })()
+            ...(hasStakeholder ? [] : [['', 'กลุ่มผู้ได้รับผลกระทบ (เลือกจากขั้นที่ 3)']]),
+            ...(quantity > 0 ? [] : [['', 'จำนวนผู้ได้รับ outcome (กรอกจำนวนของกลุ่มที่ขั้นที่ 3)']]),
+            ...ROW_TEXT.filter(([key]) => isBlank(row[key]) && !(key === 'pathwayOutcome' && !isBlank(row.outputSummary))),
+            ...ROW_POSITIVE.filter(([key]) => toNumber(row[key]) <= 0)
         ].map(([, label]) => label);
 
         // One item per row (not per cell) so a long table doesn't drown the list; the

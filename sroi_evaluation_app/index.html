@@ -772,7 +772,17 @@
                             </div>
                         </div>
 
-                        <div id="sroi-rows-container" class="space-y-4"></div>
+                        <datalist id="sroi-unit-options">
+                            <option value="คน"></option><option value="ครัวเรือน"></option><option value="ราย"></option>
+                            <option value="ไร่"></option><option value="กก."></option><option value="ตัว"></option>
+                            <option value="ครั้ง"></option><option value="ชั่วโมง"></option><option value="วัน"></option>
+                            <option value="เดือน"></option><option value="พื้นที่"></option><option value="โรงเรียน"></option>
+                            <option value="แห่ง"></option><option value="หน่วย"></option>
+                        </datalist>
+                        <div class="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_12rem] lg:gap-5 items-stretch lg:items-start">
+                            <div id="sroi-rows-container" class="space-y-4 min-w-0"></div>
+                            <nav id="sroi-row-rail" class="sroi-rail" aria-label="รายการ outcome rows"></nav>
+                        </div>
 
                         <div id="sroi-validation-panel" class="sroi-validation-panel">
                             <div class="flex items-start gap-3">
@@ -784,11 +794,16 @@
                             </div>
                         </div>
 
-                        <details class="sroi-section">
+                        <div class="sroi-section">
+                            <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-table text-chula mr-2"></i>ตารางผลการคำนวณรายปี</h4>
+                            <div id="sroi-yearly-table"></div>
+                        </div>
+
+                        <details id="formula-admin-panel" class="sroi-section hidden">
                             <summary class="cursor-pointer list-none">
                                 <div class="flex items-center justify-between gap-3">
                                     <h4 class="font-bold text-gray-900"><i class="fa-solid fa-square-root-variable text-chula mr-2"></i>ดูสูตรและตาราง PV รายปี</h4>
-                                    <span class="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1">optional</span>
+                                    <span class="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1">เฉพาะแอดมิน</span>
                                 </div>
                             </summary>
                             <div id="formula-breakdown" class="mt-4"></div>
@@ -809,9 +824,6 @@
                             <a href="dashboard.html" class="bg-gray-500 hover:bg-gray-700 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors">
                                 กลับหน้าหลัก <i class="fa-solid fa-house ml-2"></i>
                             </a>
-                            <button onclick="appState.exportPDF()" class="bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-lg shadow-md transition-colors">
-                                <i class="fa-solid fa-file-pdf mr-2 text-red-400"></i>ส่งออกเป็น PDF
-                            </button>
                             <button id="btn-edit-assessment" onclick="appState.enableEditMode()" data-testid="btn-edit-assessment"
                                     class="hidden bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-6 rounded-lg shadow transition-colors">
                                 แก้ไขข้อมูล <i class="fa-solid fa-pen-to-square ml-2"></i>
@@ -819,7 +831,33 @@
                         </div>
                     </div>
 
-                    <div id="report-container" class="print-friendly mt-4 space-y-4">
+                    <!--
+                      Report view switch and download. The report itself is A4 landscape "paper"
+                      pages drawn into #report-stage by src/lib/reportPages.js (appState.renderReportView);
+                      the PDF is made from those same pages, so "ดาวน์โหลด" gives what is on screen.
+                      The button's wording follows the view.
+                    -->
+                    <div class="flex items-center justify-between flex-wrap gap-3 mb-5">
+                        <div class="rp-switch" role="group" aria-label="รูปแบบรายงาน (Report view)" data-testid="report-view-switch">
+                            <button type="button" data-report-view="summary" aria-pressed="true" onclick="appState.setReportView('summary')" data-testid="report-view-summary">ฉบับสรุป (Summary)</button>
+                            <button type="button" data-report-view="full" aria-pressed="false" onclick="appState.setReportView('full')" data-testid="report-view-full">ฉบับเต็ม (Full)</button>
+                        </div>
+                        <button type="button" id="btn-download-report" onclick="appState.downloadReport()" data-testid="btn-download-report"
+                                class="bg-gray-900 hover:bg-black disabled:opacity-60 disabled:cursor-wait text-white px-5 py-2 rounded-lg shadow-md transition-colors">
+                            <i class="fa-solid fa-file-pdf mr-2 text-red-400"></i><span id="btn-download-report-label">ดาวน์โหลดรายงานฉบับสรุป</span>
+                        </button>
+                    </div>
+
+                    <div id="report-stage-wrap" class="w-full overflow-x-hidden">
+                        <div id="report-stage" class="rp-stage" data-testid="report-stage"></div>
+                    </div>
+
+                    <!--
+                      The previous on-screen report, no longer shown on step 6 (the paper pages above
+                      replace it). It is kept, filled in by generateReport(), because the step-5
+                      recheck modal copies its markup (showRecheckModal) as its review list.
+                    -->
+                    <div id="report-container" class="hidden print-friendly mt-4 space-y-4">
 
                         <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
                             <div class="flex items-center gap-3">
@@ -861,6 +899,11 @@
                                     <span id="r_val_npv" class="font-mono font-medium text-sm text-green-600">0.00</span>
                                 </div>
                             </div>
+                        </div>
+
+                        <div class="bg-white border border-gray-200 rounded-2xl p-5">
+                            <h4 class="font-bold text-gray-800 border-l-4 border-chula pl-2 mb-3 text-sm">ตารางผลการคำนวณรายปี</h4>
+                            <div id="r_yearly_table"></div>
                         </div>
 
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">

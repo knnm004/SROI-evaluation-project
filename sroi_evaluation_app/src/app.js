@@ -1,8 +1,9 @@
 import html2pdf from 'html2pdf.js';
 import { supabase } from './lib/supabaseClient.js';
-import { escapeHTML, formatMoney, formatNumber, formatUpdatedMeta } from './lib/format.js';
+import { escapeHTML, formatMoney, formatNumber, formatThaiDate, formatUpdatedMeta } from './lib/format.js';
 import { loadIdentity, signInWithGoogle, signInWithPassword, signOut } from './lib/session.js';
 import {
+    isAdmin,
     canEditProject,
     canDeleteProject,
     canManageMembers,
@@ -26,8 +27,25 @@ import {
     refreshOutcomes,
     pathwayReportHTML
 } from './lib/pathwayLists.js';
+import { summariseResults, safeFileName } from './lib/reportData.js';
+import { renderReportWeb, renderReportPages, exportPagesToPdf, PAGE_W } from './lib/reportPages.js';
 import { initLandingSections } from './lib/landingSections.js';
 import { initLandingPhotoWall } from './lib/landingPhotoWall.js';
+import {
+    getFinancialProxyLibrary,
+    searchFinancialProxyLibrary,
+    representativeAmount,
+    unitDenominator,
+    submitCustomFinancialProxy,
+    PROXY_TYPE_LABELS,
+    PROXY_CATEGORY_LABELS
+} from './lib/financialProxyLibrary.js';
+import {
+    ADJUSTMENT_FIELDS,
+    rowQuantity,
+    projectInvestment,
+    adjustmentFraction
+} from './lib/sroiRowData.js';
 
 // Helper to scope draft keys per project ID so projects don't bleed into each other
 function getDraftKey() {
@@ -312,6 +330,8 @@ export const appState = {
     uploadedImage: null,
     activityImages: [],
     isViewMode: false,
+    // Step 6: which report is showing ('summary' | 'full').
+    reportView: 'summary',
     // The add-a-row lists of step 3 (inputs / stakeholders / outcomes); shape in lib/pathwayData.js.
     pathwayRows: emptyPathway(),
     /** The switch in the recheck modal, as last saved: true/false, or null = never asked. */
@@ -323,6 +343,10 @@ export const appState = {
     // (every real field-level change goes through it).
     isDirty: false,
     sroiRows: [],
+    proxyLibraryEntries: [],
+    proxyLibraryLoaded: false,
+    // Rows whose "other / enter your own proxy" panel is open (transient UI state).
+    manualProxyRows: new Set(),
     areaMap: null,
     areaMarker: null,
     areaRectangle: null,
@@ -1142,6 +1166,7 @@ export const appState = {
         if (this.currentStep === this.totalSteps) {
             formNav.classList.add('hidden');
             this.generateReport();
+            this.renderReportView();
 
             // Step 6 is only ever reached after confirmAndSave() already ran from the
             // step-5 recheck modal -- there is no save button here (see index.html).
@@ -1186,6 +1211,10 @@ export const appState = {
                 btnSaveStep.classList.toggle('sm:flex', !this.isViewMode);
             }
         }
+
+        // Step 5 reads step 3's lists (stakeholders, funding, outcomes), which can change
+        // while it is closed; rebuild it before the view-mode lock below so it is locked too.
+        if (this.currentStep === 5) this.renderSROIRows();
 
         // Scoped to #view-app. This used to sweep the whole document, which now would
         // also disable the login form and the researcher-management inputs.
@@ -2846,26 +2875,66 @@ export const appState = {
     },
 
     createSROIRow(overrides = {}) {
+        // Pre-migration rows carry `outcomeStart` ('period-activity' | 'period-after');
+        // its presence is the signal that this row predates the startYear/discountRate
+        // default change below. New rows never have this key.
+        const isLegacyShape = Object.prototype.hasOwnProperty.call(overrides, 'outcomeStart');
+        const legacyStartYear = overrides.outcomeStart === 'period-after' ? 1 : 0;
+
+        // A legacy row whose discountRate is still exactly the OLD default (3.5) was
+        // never actually edited by a user -- carry it forward to the NEW default
+        // (2.42) so it keeps behaving as "untouched". A legacy row with any other
+        // value was a real user edit and must be preserved exactly.
+        const legacyDiscountRateUntouched = isLegacyShape && Number(overrides.discountRate) === 3.5;
+
+        // Several outcomes/impacts can be ticked per row. Older rows kept one text (or an old "Output").
+        const legacyText = overrides.pathwayOutcome || overrides.outputSummary || '';
+        const legacyOutcomes = Array.isArray(overrides.pathwayOutcomes)
+            ? overrides.pathwayOutcomes.filter(Boolean)
+            : (legacyText ? [legacyText] : []);
+
         return {
             id: overrides.id || `sroi_${Date.now()}_${Math.random().toString(16).slice(2)}`,
             stakeholderGroup: overrides.stakeholderGroup || '',
+            stakeholderType: overrides.stakeholderType || '',
+            // Which of step 3's stakeholder groups receive this outcome. Their head-counts
+            // give the quantity; older rows have none ticked and keep their own numbers.
+            stakeholderIds: Array.isArray(overrides.stakeholderIds) ? overrides.stakeholderIds : [],
             groupSize: overrides.groupSize ?? 0,
+            // No longer asked in step 5 (inputs live in step 3); kept so old rows lose nothing.
             inputDescription: overrides.inputDescription || '',
-            outputSummary: overrides.outputSummary || '',
+            // The outcome/impact picked from step 3. Old rows typed an "Output" here instead.
+            pathwayOutcomes: legacyOutcomes,
+            pathwayOutcome: legacyOutcomes.join('; '), // the ticked ones, joined: what titles, reports and checks read
+            // Cost is project-level now (step 3's funding total); only old rows hold their own.
             investment: overrides.investment ?? 0,
             quantity: overrides.quantity ?? 0,
             monetaryValue: overrides.monetaryValue ?? 0,
             changeDepth: overrides.changeDepth || '',
-            weighting: overrides.weighting || '',
             outcomeDescription: overrides.outcomeDescription || '',
             duration: overrides.duration ?? 1,
-            outcomeStart: overrides.outcomeStart || 'period-activity',
-            discountRate: overrides.discountRate ?? 3.5,
+            startYear: overrides.startYear !== undefined ? overrides.startYear : legacyStartYear,
+            discountRate: legacyDiscountRateUntouched ? 2.42 : (overrides.discountRate ?? 2.42),
             deadweight: overrides.deadweight ?? 0,
             displacement: overrides.displacement ?? 0,
             attribution: overrides.attribution ?? 0,
             dropoff: overrides.dropoff ?? 0,
+            // 'percent' | 'number': how each adjustment above was typed (see sroiRowData.js).
+            deadweightMode: overrides.deadweightMode === 'number' ? 'number' : 'percent',
+            displacementMode: overrides.displacementMode === 'number' ? 'number' : 'percent',
+            attributionMode: overrides.attributionMode === 'number' ? 'number' : 'percent',
+            dropoffMode: overrides.dropoffMode === 'number' ? 'number' : 'percent',
             valuationApproach: overrides.valuationApproach || '',
+            proxyCategory: overrides.proxyCategory || '',
+            proxyType: overrides.proxyType || '',
+            proxyLibraryId: overrides.proxyLibraryId || null,
+            proxyLibraryLabel: overrides.proxyLibraryLabel || '',
+            proxyUnitLabel: overrides.proxyUnitLabel || '',
+            // '' | 'sent' | 'failed': what happened to a user-entered ("other") proxy.
+            proxySubmission: overrides.proxySubmission || '',
+            // The "per x" of the value ("มูลค่าต่อ x ต่อปี"). Not everything is measured
+            // per person; legacy rows predate this field and were always per person.
+            valueUnit: overrides.valueUnit ?? 'คน',
             indicatorSource: overrides.indicatorSource || ''
         };
     },
@@ -2877,19 +2946,28 @@ export const appState = {
             this.sroiRows = [this.createSROIRow()];
         }
 
+        // Re-rendering rebuilds every row, so remember which were expanded: otherwise
+        // picking a proxy in row 3 would collapse the row you're working in. New rows
+        // open; on the very first render only the first row does.
+        const previousRows = [...container.querySelectorAll('details.sroi-row')];
+        const previousIds = new Set(previousRows.map(details => details.dataset.rowId));
+        const openIds = new Set(previousRows.filter(details => details.open).map(details => details.dataset.rowId));
+        const isOpen = (row, index) => (previousIds.size ? (openIds.has(row.id) || !previousIds.has(row.id)) : index === 0);
+
         container.innerHTML = this.sroiRows.map((row, index) => {
             const result = this.calculateSROIRow(row);
-            const title = row.outcomeDescription || row.stakeholderGroup || `Outcome row ${index + 1}`;
+            const stakeholderNames = this.rowStakeholderNames(row);
+            const title = row.pathwayOutcome || row.outcomeDescription || row.stakeholderGroup || `Outcome row ${index + 1}`;
             return `
-                <details class="form-panel bg-white sroi-row" ${index === 0 ? 'open' : ''}>
+                <details class="form-panel bg-white sroi-row" data-row-id="${row.id}" ${isOpen(row, index) ? 'open' : ''}>
                     <summary class="cursor-pointer list-none">
                         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                             <div>
                                 <p class="font-bold text-gray-900"><i class="fa-solid fa-table-list text-chula mr-2"></i>${this.escapeHTML(title)}</p>
-                                <p class="text-xs text-gray-500">PV ${this.formatMoney(result.totalPV)} บาท · Investment ${this.formatMoney(result.investment)} บาท</p>
+                                <p class="text-xs text-gray-500">${stakeholderNames.length ? `ผู้มีส่วนได้ส่วนเสีย: ${this.escapeHTML(stakeholderNames.join(', '))} · ` : ''}PV ${this.formatMoney(result.totalPV)} บาท</p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="text-xs font-semibold bg-chula bg-opacity-10 text-chula-darker px-3 py-1 rounded-full">1 : ${result.sroiRatio.toFixed(2)}</span>
+                                ${stakeholderNames.length > 1 ? `<span class="text-xs font-semibold bg-chula bg-opacity-10 text-chula-darker px-3 py-1 rounded-full"><i class="fa-solid fa-users mr-1"></i>${stakeholderNames.length} กลุ่ม</span>` : ''}
                                 ${this.sroiRows.length > 1 ? `<button type="button" onclick="event.preventDefault(); appState.removeSROIRow('${row.id}')" class="text-xs text-red-600 hover:text-red-800 px-2 py-1"><i class="fa-solid fa-trash-can mr-1"></i>ลบ</button>` : ''}
                             </div>
                         </div>
@@ -2897,51 +2975,105 @@ export const appState = {
                     <div class="mt-4 space-y-5">
                         <div>
                             <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-users text-chula mr-2"></i>Stage 1: Stakeholders</h4>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                ${this.rowInput(row, 'stakeholderGroup', 'กลุ่มผู้ได้รับผลกระทบ', 'text', 'เช่น สมาชิกชุมชน ผู้เข้าอบรม นักเรียน ครัวเรือน')}
-                                ${this.rowInput(row, 'groupSize', 'จำนวนคนในกลุ่มทั้งหมด', 'number', '0')}
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="form-label">กลุ่มผู้ได้รับผลกระทบ (เลือกได้หลายกลุ่ม)</label>
+                                    ${this.renderRowStakeholderChecks(row)}
+                                </div>
+                                <div>
+                                    <label class="form-label">ประเภทผู้มีส่วนได้ส่วนเสีย</label>
+                                    <select class="form-control" data-sroi-row="${row.id}" data-sroi-field="stakeholderType">
+                                        <option value="" ${!row.stakeholderType ? 'selected' : ''}>-- ไม่ระบุ --</option>
+                                        <option value="individual" ${row.stakeholderType === 'individual' ? 'selected' : ''}>บุคคล (Individual)</option>
+                                        <option value="community" ${row.stakeholderType === 'community' ? 'selected' : ''}>ชุมชน (Community)</option>
+                                        <option value="organization" ${row.stakeholderType === 'organization' ? 'selected' : ''}>องค์กร (Organization)</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                         <div>
-                            <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-arrow-right-to-bracket text-chula mr-2"></i>Stage 2: Inputs และ Outputs</h4>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                ${this.rowTextarea(row, 'inputDescription', 'สิ่งที่ลงทุน/สนับสนุน', 'เงิน เวลา อุปกรณ์ องค์ความรู้ หรือทรัพยากรที่ผู้มีส่วนเกี่ยวข้องลงทุน')}
-                                ${this.rowTextarea(row, 'outputSummary', 'Output เชิงตัวเลข', 'เช่น จัดอบรม 3 รุ่น ผู้เข้าร่วม 120 คน ผลิตคู่มือ 1 ชุด')}
+                            <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-arrow-right-to-bracket text-chula mr-2"></i>Stage 2: ต้นทุนและ Outcome</h4>
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="form-label">ต้นทุนรวมของโครงการ (จาก Impact Pathway ขั้นที่ 3)</label>
+                                    ${this.renderProjectCostSummary()}
+                                </div>
+                                <div>
+                                    <label class="form-label">Outcome ที่สร้างผลลัพธ์และผลกระทบ</label>
+                                    ${this.renderRowOutcomeChecks(row)}
+                                </div>
                             </div>
                         </div>
                         <div>
                             <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-coins text-chula mr-2"></i>Stage 3: Outcome Value</h4>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                ${this.rowInput(row, 'investment', 'มูลค่าการลงทุนรวม (บาท)', 'number', '0.00')}
-                                ${this.rowInput(row, 'quantity', 'จำนวนผู้ได้รับ outcome', 'number', '0')}
-                                ${this.rowInput(row, 'monetaryValue', 'มูลค่าต่อคนต่อปี (บาท)', 'number', '0.00')}
-                                ${this.rowInput(row, 'changeDepth', 'จำนวน/ระดับการเปลี่ยนแปลงต่อคน (เพื่อความโปร่งใส)', 'text', 'เช่น รายได้เพิ่ม 20%')}
-                                ${this.rowInput(row, 'weighting', 'น้ำหนักความสำคัญ (1-10, สะท้อนใน monetary value)', 'number', '1-10')}
-                                ${this.rowInput(row, 'outcomeDescription', 'Outcome description', 'text', 'การเปลี่ยนแปลงที่เกิดขึ้นกับ stakeholder')}
-                                ${this.rowInput(row, 'duration', 'ระยะเวลา outcome (ปี)', 'number', '1-6')}
                                 <div>
-                                    <label class="form-label">Outcome เริ่มเมื่อใด</label>
-                                    <select class="form-control" data-sroi-row="${row.id}" data-sroi-field="outcomeStart">
-                                        <option value="period-activity" ${row.outcomeStart === 'period-activity' ? 'selected' : ''}>ปีที่ดำเนินกิจกรรม</option>
-                                        <option value="period-after" ${row.outcomeStart === 'period-after' ? 'selected' : ''}>ปีถัดจากกิจกรรม</option>
-                                    </select>
+                                    ${this.rowInput(row, 'valueUnit', 'หน่วยของสิ่งที่วัด (ต่อ ...)', 'text', 'เช่น คน ครัวเรือน ไร่ กก.', { attrs: 'list="sroi-unit-options" autocomplete="off"' })}
+                                    <p class="text-xs text-gray-500 mt-1">แก้ไขได้ตามสิ่งที่วัด (ไม่ใช่ทุกอย่างวัดต่อคน) -- ใช้เป็นหน่วยของช่องจำนวนและมูลค่าถัดไป</p>
                                 </div>
-                                ${this.rowInput(row, 'discountRate', 'Discount rate (%)', 'number', '3.5')}
+                                ${this.rowInput(row, 'monetaryValue', '', 'number', '0.00', { labelHtml: this.unitLabelHtml(row, 'มูลค่าที่เป็นตัวเงินต่อหนึ่งหน่วยผลลัพธ์ (บาท ต่อ ', ' ต่อปี)') })}
+                                ${this.rowInput(row, 'changeDepth', 'จำนวน/ระดับการเปลี่ยนแปลงต่อคน (เพื่อความโปร่งใส)', 'text', 'เช่น รายได้เพิ่ม 20%')}
+                                ${this.rowInput(row, 'outcomeDescription', 'Outcome description', 'text', 'การเปลี่ยนแปลงที่เกิดขึ้นกับ stakeholder')}
+                                ${this.rowInput(row, 'duration', 'ระยะเวลา outcome (ปี)', 'number', '1-5')}
+                                <div>
+                                    <label class="form-label">เริ่มรับผลประโยชน์ในปีที่</label>
+                                    <select class="form-control" data-sroi-row="${row.id}" data-sroi-field="startYear">
+                                        ${[0, 1, 2, 3, 4, 5].map(year => `<option value="${year}" ${Number(row.startYear) === year ? 'selected' : ''}>ปีที่ ${year}</option>`).join('')}
+                                    </select>
+                                    <p class="text-xs text-gray-500 mt-1">นับจากปีที่เริ่มดำเนินกิจกรรม (ปีที่ 0 = เริ่มรับผลทันที)</p>
+                                </div>
+                                <div>
+                                    ${this.rowInput(row, 'discountRate', 'Discount rate (%)', 'number', '2.42')}
+                                    <p class="text-xs text-gray-500 mt-1">ค่าเริ่มต้นอ้างอิงอัตราเงินเฟ้อไทยปัจจุบัน (~2.42%) ปรับได้ตามความเหมาะสมของโครงการ</p>
+                                </div>
                             </div>
                         </div>
                         <div>
                             <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-scale-balanced text-chula mr-2"></i>Impact Adjustment</h4>
+                            <p class="text-xs text-gray-500 mb-3">แต่ละค่ากรอกได้ทั้งแบบเปอร์เซ็นต์ (%) หรือแบบตัวเลข (จำนวน ในหน่วยเดียวกับจำนวนผู้ได้รับ outcome)</p>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                ${this.rowInput(row, 'deadweight', 'Deadweight (%)', 'number', '0')}
-                                ${this.rowInput(row, 'displacement', 'Displacement (%)', 'number', '0')}
-                                ${this.rowInput(row, 'attribution', 'Attribution (%)', 'number', '0')}
-                                ${this.rowInput(row, 'dropoff', 'Drop-off ต่อปี (%)', 'number', '0')}
+                                ${this.renderAdjustmentField(row, 'deadweight', 'Deadweight', 'ผลที่จะเกิดขึ้นอยู่แล้วแม้ไม่มีการดำเนินงาน')}
+                                ${this.renderAdjustmentField(row, 'displacement', 'Displacement', 'สัดส่วนของประโยชน์ที่โครงการสร้างขึ้นโดยทำให้กลุ่มหรือพื้นที่อื่นสูญเสียประโยชน์')}
+                                ${this.renderAdjustmentField(row, 'attribution', 'Attribution', 'การปรับส่วนที่เกิดจากผู้มีส่วนร่วมรายอื่น หรือสัดส่วนที่ให้เครดิตแก่ปัจจัยหรือผู้ร่วมดำเนินงานอื่น')}
+                                ${this.renderAdjustmentField(row, 'dropoff', 'Drop-off ต่อปี', 'อัตราที่ผลลัพธ์ลดลงในแต่ละปีถัดไป (ถ้ามี)')}
                             </div>
                         </div>
                         <div>
                             <h4 class="font-bold text-gray-900 mb-3"><i class="fa-solid fa-file-signature text-chula mr-2"></i>หลักฐานและวิธีประเมินมูลค่า</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                ${this.rowTextarea(row, 'valuationApproach', 'Valuation approach / financial proxy', 'ระบุวิธีประเมินมูลค่า เช่น market price, avoided cost หรือ proxy')}
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="form-label"><span class="proxy-step-badge">1</span>หมวดหมู่ปัจจัยผลกระทบทางสังคม</label>
+                                    <select class="form-control" data-sroi-row="${row.id}" data-sroi-field="proxyCategory" onchange="appState.refreshProxyPicker('${row.id}')">
+                                        <option value="" ${!row.proxyCategory ? 'selected' : ''}>-- ทุกหมวดหมู่ --</option>
+                                        ${Object.entries(PROXY_CATEGORY_LABELS).map(([value, label]) => `<option value="${value}" ${row.proxyCategory === value ? 'selected' : ''}>${this.escapeHTML(label)}</option>`).join('')}
+                                    </select>
+                                    <p class="text-xs text-gray-500 mt-1">Social impact factor เช่น การแพทย์ เกษตรกรรม การศึกษา -- เลือกเพื่อกรองรายการในข้อ 3</p>
+                                </div>
+                                <div>
+                                    <label class="form-label"><span class="proxy-step-badge">2</span>ประเภท Financial Proxy</label>
+                                    <select class="form-control" data-sroi-row="${row.id}" data-sroi-field="proxyType" onchange="appState.refreshProxyPicker('${row.id}')">
+                                        <option value="" ${!row.proxyType ? 'selected' : ''}>-- ทุกประเภท --</option>
+                                        ${Object.entries(PROXY_TYPE_LABELS).map(([value, label]) => `<option value="${value}" ${row.proxyType === value ? 'selected' : ''}>${this.escapeHTML(label)}</option>`).join('')}
+                                    </select>
+                                    <p class="text-xs text-gray-500 mt-1">ค่าที่บันทึกจริงของแถวนี้ และใช้กรองรายการในข้อ 3 -- ระบุเองได้หากประเมินมูลค่าด้วยวิธีอื่น</p>
+                                </div>
+                                <div class="relative">
+                                    <label class="form-label"><span class="proxy-step-badge">3</span>เลือก Financial Proxy จากคลัง</label>
+                                    <input type="text" class="form-control"
+                                           placeholder="คลิกเพื่อดูรายการทั้งหมด หรือพิมพ์ค้นหา เช่น 'ไก่', 'ค่าจ้าง'"
+                                           value="${this.escapeHTML(row.proxyLibraryLabel)}"
+                                           data-proxy-picker="${row.id}"
+                                           onfocus="appState.onProxyPickerFocus('${row.id}')"
+                                           oninput="appState.onProxyPickerInput('${row.id}', this.value)">
+                                    <div class="proxy-picker-results hidden" data-proxy-picker-results="${row.id}"></div>
+                                    <p class="text-xs text-gray-500 mt-1">ใช้สำหรับค้นหาเท่านั้น -- เลือกแล้วระบบจะเติม Outcome description, หมวดหมู่, ประเภท, หน่วย, มูลค่า และหมายเหตุที่มาให้อัตโนมัติ (แก้ไขภายหลังได้)${row.proxyUnitLabel ? ` · หน่วยในคลัง: ${this.escapeHTML(row.proxyUnitLabel)}` : ''}</p>
+                                    ${row.proxySubmission === 'sent' ? '<p class="text-sm text-green-700 mt-1"><i class="fa-solid fa-circle-check mr-1"></i>ส่งค่าแทนมูลค่าที่กรอกเองนี้เข้าคลังเพื่อรอตรวจสอบแล้ว</p>' : ''}
+                                    ${row.proxySubmission === 'failed' ? '<p class="text-sm text-amber-700 mt-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>ใช้ค่าที่กรอกเองในแถวนี้แล้ว แต่ยังส่งเข้าคลังไม่สำเร็จ</p>' : ''}
+                                </div>
+                            </div>
+                            ${this.manualProxyRows.has(row.id) ? this.renderManualProxyPanel(row) : ''}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                ${this.rowTextarea(row, 'valuationApproach', 'หมายเหตุเพิ่มเติม / วิธีคำนวณ (optional)', 'ที่มาของตัวเลขและวิธีคำนวณ เช่น 2 คน x 6 พื้นที่ x 78,000 บาท/ปี รวมถึงข้อควรระวัง')}
                                 ${this.rowTextarea(row, 'indicatorSource', 'Indicator และแหล่งข้อมูล', 'ระบุว่าจะวัด outcome อย่างไรและใช้ข้อมูลจากแหล่งใด')}
                             </div>
                         </div>
@@ -2955,14 +3087,191 @@ export const appState = {
         this.calculateSROIPreview();
     },
 
-    rowInput(row, field, label, type, placeholder) {
+    // ---- Step 5 rows fed by step 3 (impact pathway): stakeholders, cost, outcomes ----
+
+    // What the row is calculated with: head-count of its ticked stakeholder groups.
+    getRowQuantity(row) {
+        return rowQuantity(row, this.pathwayRows);
+    },
+
+    getProjectInvestment() {
+        return projectInvestment(this.sroiRows, this.pathwayRows);
+    },
+
+    // Names of the row's ticked groups (that still exist in step 3); old rows show their typed group.
+    rowStakeholderNames(row) {
+        const ticked = new Set(row.stakeholderIds);
+        const names = (this.pathwayRows.stakeholders ?? [])
+            .filter(item => ticked.has(item.id) && String(item.name ?? '').trim())
+            .map(item => String(item.name).trim());
+        if (names.length) return names;
+        return row.stakeholderGroup ? [row.stakeholderGroup] : [];
+    },
+
+    renderRowStakeholderChecks(row) {
+        const groups = (this.pathwayRows.stakeholders ?? []).filter(item => String(item.name ?? '').trim());
+        const unit = this.unitText(row.valueUnit);
+        if (!groups.length) {
+            return `<div class="proxy-manual-panel text-sm text-gray-600">ยังไม่มีผู้มีส่วนได้ส่วนเสียใน Impact Pathway
+                ${row.stakeholderGroup ? `<p class="mt-1">กลุ่มเดิมของแถวนี้: <strong>${this.escapeHTML(row.stakeholderGroup)}</strong></p>` : ''}
+                <button type="button" class="block mt-2 text-chula font-semibold" onclick="appState.goToStep(3); appState.showPathwayPanel('stakeholders')">ไปเพิ่มที่ขั้นที่ 3 &rarr;</button></div>`;
+        }
+        const ticked = new Set(row.stakeholderIds);
+        const boxes = groups.map(item => `
+            <label class="pathway-check">
+                <input type="checkbox" ${ticked.has(item.id) ? 'checked' : ''} onchange="appState.toggleRowStakeholder('${row.id}', '${this.escapeHTML(item.id)}', this.checked)">
+                <span>${this.escapeHTML(String(item.name).trim())} <span class="text-gray-500">(${this.formatNumber(this.parseNumberValue(item.count))})</span></span>
+            </label>`).join('');
+        const quantity = this.getRowQuantity(row);
+        const legacy = !row.stakeholderIds.length && this.parseNumberValue(row.quantity) > 0
+            ? `<p class="text-xs text-amber-700 mt-1">จำนวนเดิมของแถวนี้ ${this.formatNumber(this.parseNumberValue(row.quantity))} ${this.escapeHTML(unit)} ยังใช้อยู่ จนกว่าจะเลือกกลุ่มจากรายการ</p>`
+            : '';
+        return `<div class="pathway-checks" role="group">${boxes}</div>
+            <p class="text-sm mt-2">จำนวนที่ได้รับ outcome: <strong>${this.formatNumber(quantity)}</strong> <span data-unit-label="${row.id}">${this.escapeHTML(unit)}</span> <span class="text-xs text-gray-500">(รวมจำนวนของกลุ่มที่เลือก จากขั้นที่ 3)</span></p>${legacy}`;
+    },
+
+    toggleRowStakeholder(rowId, stakeholderId, checked) {
+        const row = this.sroiRows.find(item => item.id === rowId);
+        if (!row) return;
+        const ids = new Set(row.stakeholderIds);
+        if (checked) ids.add(stakeholderId); else ids.delete(stakeholderId);
+        row.stakeholderIds = [...ids];
+        row.quantity = this.getRowQuantity(row);
+        this.renderSROIRows();
+        this.scheduleSave();
+        this.updateLiveSummary();
+    },
+
+    // One investment can serve many stakeholder groups, so cost is shown once, from step 3.
+    renderProjectCostSummary() {
+        const funds = (this.pathwayRows.inputs ?? []).filter(item => String(item.name ?? '').trim() || this.parseNumberValue(item.amount) > 0);
+        const total = this.getProjectInvestment();
+        if (!funds.length || !funds.some(item => this.parseNumberValue(item.amount) > 0)) {
+            return `<div class="proxy-manual-panel text-sm text-gray-600">${total > 0
+                ? `ต้นทุนเดิมที่กรอกไว้ในแถว: <strong>${this.formatMoney(total)}</strong> บาท (ระบบรุ่นก่อน) — เพิ่มแหล่งทุนที่ขั้นที่ 3 เพื่อใช้ค่าจาก Impact Pathway`
+                : 'ยังไม่มีแหล่งทุนใน Impact Pathway'}
+                <button type="button" class="block mt-2 text-chula font-semibold" onclick="appState.goToStep(3); appState.showPathwayPanel('inputs')">ไปกรอกแหล่งทุนที่ขั้นที่ 3 &rarr;</button></div>`;
+        }
+        const lines = funds.map(item => `
+            <li class="flex justify-between gap-3"><span>${this.escapeHTML(String(item.name || '-').trim())}${item.type ? ` <span class="text-gray-500">(${this.escapeHTML(item.type)})</span>` : ''}</span><span class="font-mono">${this.formatMoney(this.parseNumberValue(item.amount))}</span></li>`).join('');
+        return `<div class="proxy-manual-panel text-sm"><ul class="space-y-1">${lines}</ul>
+            <p class="flex justify-between border-t border-gray-200 mt-2 pt-2 font-bold"><span>รวมเป็นต้นทุน (บาท)</span><span class="font-mono">${this.formatMoney(total)}</span></p>
+            <p class="text-xs text-gray-500 mt-1">ใช้ร่วมกันทุกแถว (ลงทุนครั้งเดียวได้หลายกลุ่ม) · แก้ไขที่ขั้นที่ 3</p></div>`;
+    },
+
+    // Outcomes (step 3's list) and impacts (its three impact boxes, one bullet per line).
+    getOutcomeOptions() {
+        const outcomes = (this.pathwayRows.outcomes ?? [])
+            .map(item => ({ text: String(item.change ?? '').trim(), stakeholderIds: item.stakeholderIds ?? [] }))
+            .filter(item => item.text);
+        const impacts = [];
+        [['i_impact_economic', 'เศรษฐกิจ'], ['i_impact_social', 'สังคม'], ['i_impact_environment', 'สิ่งแวดล้อม']].forEach(([id, group]) => {
+            String(document.getElementById(id)?.value ?? '').split(/\r?\n/)
+                .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+                .filter(Boolean)
+                .forEach(text => impacts.push({ text, group }));
+        });
+        return { outcomes, impacts };
+    },
+
+    // Tick any number of outcomes/impacts from step 3 for this row.
+    renderRowOutcomeChecks(row) {
+        const { outcomes, impacts } = this.getOutcomeOptions();
+        const known = new Set([...outcomes, ...impacts].map(item => item.text));
+        const chosen = new Set(row.pathwayOutcomes);
+        const box = (text, label = text) => `
+            <label class="pathway-check">
+                <input type="checkbox" data-outcome-text="${this.escapeHTML(text)}" ${chosen.has(text) ? 'checked' : ''} onchange="appState.toggleRowOutcome('${row.id}', this.dataset.outcomeText, this.checked)">
+                <span>${this.escapeHTML(label)}</span>
+            </label>`;
+        const heading = title => `<p class="text-[11px] font-bold text-gray-400 mt-1">${title}</p>`;
+        // Typed text from before this was a list (or an item since removed in step 3) stays ticked until unticked.
+        const legacy = row.pathwayOutcomes.filter(text => !known.has(text)).map(text => box(text, `(ข้อความเดิม) ${text}`)).join('');
+        const body = [
+            legacy,
+            outcomes.length ? heading('Outcome (ผลลัพธ์)') + outcomes.map(item => box(item.text)).join('') : '',
+            impacts.length ? heading('Impact (ผลกระทบ)') + impacts.map(item => box(item.text, `${item.text} (${item.group})`)).join('') : ''
+        ].join('');
+        if (!body.trim()) {
+            return `<div class="proxy-manual-panel text-sm text-gray-600">ยังไม่มี Outcome/Impact ในขั้นที่ 3
+                <button type="button" class="block mt-2 text-chula font-semibold" onclick="appState.goToStep(3); appState.showPathwayPanel('outcomes')">ไปกรอกที่ขั้นที่ 3 &rarr;</button></div>`;
+        }
+        return `<div class="pathway-checks" role="group">${body}</div>
+            <p class="text-xs text-gray-500 mt-1">เลือกได้หลายรายการ จากขั้นที่ 3 (Outcomes และ Impacts) — ระบบติ๊กผู้มีส่วนได้ส่วนเสียของ outcome ที่เลือกให้ (แก้ได้)</p>`;
+    },
+
+    toggleRowOutcome(rowId, text, checked) {
+        const row = this.sroiRows.find(item => item.id === rowId);
+        if (!row) return;
+        const outcomes = this.getOutcomeOptions().outcomes;
+        const stakeholdersOf = value => outcomes.find(item => item.text === value)?.stakeholderIds ?? [];
+        const ids = new Set(row.stakeholderIds);
+
+        if (checked) {
+            if (!row.pathwayOutcomes.includes(text)) row.pathwayOutcomes.push(text);
+            stakeholdersOf(text).forEach(id => ids.add(id));
+        } else {
+            row.pathwayOutcomes = row.pathwayOutcomes.filter(item => item !== text);
+            // Drop this outcome's stakeholders unless another ticked outcome still has them.
+            const stillNeeded = new Set(row.pathwayOutcomes.flatMap(stakeholdersOf));
+            stakeholdersOf(text).forEach(id => { if (!stillNeeded.has(id)) ids.delete(id); });
+        }
+        row.pathwayOutcome = row.pathwayOutcomes.join('; ');
+        row.stakeholderIds = [...ids];
+        row.quantity = this.getRowQuantity(row);
+        this.renderSROIRows();
+        this.scheduleSave();
+        this.updateLiveSummary();
+    },
+
+    // Deadweight / displacement / attribution / drop-off: a value plus a "%" or "จำนวน" switch.
+    renderAdjustmentField(row, field, label, hint) {
+        const mode = row[`${field}Mode`] === 'number' ? 'number' : 'percent';
+        return `
+            <div>
+                <label class="form-label">${this.escapeHTML(label)}</label>
+                <div class="flex gap-2">
+                    <input type="number" step="any" min="0" ${mode === 'percent' ? 'max="100"' : ''} class="form-control text-right font-mono" value="${this.escapeHTML(row[field])}" placeholder="0" data-sroi-row="${row.id}" data-sroi-field="${field}" data-adjust-input="${row.id}:${field}">
+                    <select class="form-control" style="width:auto" data-sroi-row="${row.id}" data-sroi-field="${field}Mode" aria-label="${this.escapeHTML(label)}: หน่วยที่กรอก">
+                        <option value="percent" ${mode === 'percent' ? 'selected' : ''}>%</option>
+                        <option value="number" ${mode === 'number' ? 'selected' : ''}>จำนวน</option>
+                    </select>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">${this.escapeHTML(hint)}</p>
+                <p class="text-xs text-chula-darker mt-1" data-adjust-hint="${row.id}:${field}">${this.escapeHTML(this.adjustmentHintText(row, field))}</p>
+            </div>`;
+    },
+
+    // "= 25% ของ 80 คน" / "≈ 20 คน" -- shows the other representation of what was typed.
+    adjustmentHintText(row, field) {
+        const quantity = this.getRowQuantity(row);
+        const value = this.parseNumberValue(row[field]);
+        if (!value || quantity <= 0) return '';
+        const unit = this.unitText(row.valueUnit);
+        const fraction = adjustmentFraction(row, field, quantity);
+        return row[`${field}Mode`] === 'number'
+            ? `= ${(fraction * 100).toFixed(1)}% ของ ${this.formatNumber(quantity)} ${unit}`
+            : `≈ ${this.formatNumber(Math.round(fraction * quantity * 100) / 100)} ${unit} จาก ${this.formatNumber(quantity)}`;
+    },
+
+    refreshAdjustHints(row) {
+        ADJUSTMENT_FIELDS.forEach(field => {
+            const hint = document.querySelector(`[data-adjust-hint="${row.id}:${field}"]`);
+            if (hint) hint.textContent = this.adjustmentHintText(row, field);
+            const input = document.querySelector(`[data-adjust-input="${row.id}:${field}"]`);
+            if (input) {
+                if (row[`${field}Mode`] === 'number') input.removeAttribute('max'); else input.setAttribute('max', '100');
+            }
+        });
+    },
+
+    rowInput(row, field, label, type, placeholder, { labelHtml = null, attrs = '' } = {}) {
         const constraints = {
             groupSize: 'min="0"',
             investment: 'min="0"',
             quantity: 'min="0"',
             monetaryValue: 'min="0"',
-            duration: 'min="1" max="6"',
-            weighting: 'min="1" max="10"',
+            duration: 'min="1" max="5"',
             discountRate: 'min="0" max="100"',
             deadweight: 'min="0" max="100"',
             displacement: 'min="0" max="100"',
@@ -2972,10 +3281,26 @@ export const appState = {
 
         return `
             <div>
-                <label class="form-label">${this.escapeHTML(label)}</label>
-                <input type="${type}" class="form-control ${type === 'number' ? 'text-right font-mono' : ''}" value="${this.escapeHTML(row[field])}" placeholder="${this.escapeHTML(placeholder)}" data-sroi-row="${row.id}" data-sroi-field="${field}" ${type === 'number' ? `step="any" ${constraints[field] || ''}` : ''}>
+                <label class="form-label">${labelHtml ?? this.escapeHTML(label)}</label>
+                <input type="${type}" class="form-control ${type === 'number' ? 'text-right font-mono' : ''}" value="${this.escapeHTML(row[field])}" placeholder="${this.escapeHTML(placeholder)}" data-sroi-row="${row.id}" data-sroi-field="${field}" ${type === 'number' ? `step="any" ${constraints[field] || ''}` : ''} ${attrs}>
             </div>
         `;
+    },
+
+    // Label whose "x" follows the row's editable unit; refreshUnitLabels() keeps it
+    // live while the user types. `before`/`after` are trusted literals, the unit is escaped.
+    unitLabelHtml(row, before, after) {
+        return `${before}<span data-unit-label="${row.id}">${this.escapeHTML(this.unitText(row.valueUnit))}</span>${after}`;
+    },
+
+    unitText(value) {
+        return String(value ?? '').trim() || 'หน่วย';
+    },
+
+    refreshUnitLabels(rowId, unit) {
+        document.querySelectorAll(`[data-unit-label="${rowId}"]`).forEach(el => {
+            el.textContent = this.unitText(unit);
+        });
     },
 
     rowTextarea(row, field, label, placeholder) {
@@ -2987,11 +3312,70 @@ export const appState = {
         `;
     },
 
+    // Right-hand rail: one block per outcome row (jump to it) and a "+" to add another.
+    renderSROIRail() {
+        const rail = document.getElementById('sroi-row-rail');
+        if (!rail) return;
+        // A removed row's id can linger here; fall back to the first row.
+        const activeId = this.sroiRows.some(row => row.id === this.sroiRailActiveId) ? this.sroiRailActiveId : this.sroiRows[0]?.id;
+        const blocks = this.sroiRows.map((row, index) => {
+            return `
+                <button type="button" class="sroi-rail-item ${row.id === activeId ? 'sroi-rail-item-active' : ''}" data-rail-row="${row.id}" onclick="appState.jumpToSROIRow('${row.id}')">
+                    <span class="sroi-rail-num">Row ${index + 1}</span>
+                </button>`;
+        }).join('');
+        rail.innerHTML = `
+            <p class="sroi-rail-title">Outcome rows</p>
+            <div class="sroi-rail-list">
+                ${blocks}
+                <button type="button" class="sroi-rail-add" onclick="appState.addSROIRow()" aria-label="เพิ่ม outcome row">
+                    <span class="sroi-rail-add-icon">+</span>เพิ่ม outcome row
+                </button>
+            </div>`;
+        this.attachSROIRailScrollSpy();
+    },
+
+    jumpToSROIRow(rowId) {
+        const details = document.querySelector(`details.sroi-row[data-row-id="${rowId}"]`);
+        if (!details) return;
+        details.open = true;
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.setSROIRailActive(rowId);
+    },
+
+    setSROIRailActive(rowId) {
+        if (this.sroiRailActiveId === rowId) return;
+        this.sroiRailActiveId = rowId;
+        document.querySelectorAll('[data-rail-row]').forEach(el => {
+            el.classList.toggle('sroi-rail-item-active', el.dataset.railRow === rowId);
+        });
+    },
+
+    // Highlight the row nearest the top of the screen as the page scrolls. Registered once.
+    attachSROIRailScrollSpy() {
+        if (this.sroiRailScrollAttached) return;
+        this.sroiRailScrollAttached = true;
+        let frame = null;
+        window.addEventListener('scroll', () => {
+            if (frame) return;
+            frame = requestAnimationFrame(() => {
+                frame = null;
+                const rows = [...document.querySelectorAll('details.sroi-row')];
+                if (!rows.length || document.getElementById('step-5')?.classList.contains('hidden')) return;
+                const current = rows.filter(el => el.getBoundingClientRect().top <= 140).pop() || rows[0];
+                this.setSROIRailActive(current.dataset.rowId);
+            });
+        }, { passive: true });
+    },
+
     addSROIRow() {
-        this.sroiRows.push(this.createSROIRow());
+        const row = this.createSROIRow();
+        this.sroiRows.push(row);
+        this.sroiRailActiveId = row.id;
         this.renderSROIRows();
         this.scheduleSave();
         this.updateLiveSummary();
+        this.jumpToSROIRow(row.id);
     },
 
     removeSROIRow(rowId) {
@@ -3006,8 +3390,248 @@ export const appState = {
         const row = this.sroiRows.find(item => item.id === rowId);
         if (!row) return;
         row[field] = value;
+        if (field === 'valueUnit') this.refreshUnitLabels(rowId, value);
+        if (field === 'valueUnit' || ADJUSTMENT_FIELDS.some(name => field === name || field === `${name}Mode`)) {
+            this.refreshAdjustHints(row);
+        }
         this.calculateSROIPreview();
         this.updateSROIValidation();
+        this.scheduleSave();
+        this.updateLiveSummary();
+    },
+
+    // Financial proxy library picker (step 5). The fetch is deliberately deferred
+    // to the picker's first focus rather than prefetched in init() -- init() runs
+    // before loadIdentity() resolves, so an early fetch would run pre-auth, get
+    // blocked by RLS, and permanently cache an empty list in getFinancialProxyLibrary().
+    async loadProxyLibraryOnce() {
+        if (this.proxyLibraryEntries.length || this._proxyLibraryLoading) return;
+        this._proxyLibraryLoading = true;
+        this.proxyLibraryEntries = await getFinancialProxyLibrary();
+        this.proxyLibraryLoaded = true;
+        this._proxyLibraryLoading = false;
+    },
+
+    async onProxyPickerFocus(rowId) {
+        this.attachProxyPickerOutsideClickHandler();
+        await this.loadProxyLibraryOnce();
+        // Show the full list on focus rather than filtering by whatever text is
+        // currently displayed (e.g. the last-picked entry's name) -- select the text
+        // too, so typing immediately replaces it instead of appending to it.
+        const input = document.querySelector(`[data-proxy-picker="${rowId}"]`);
+        input?.select();
+        this.renderProxyPickerResults(rowId, '');
+    },
+
+    onProxyPickerInput(rowId, query) {
+        this.renderProxyPickerResults(rowId, query);
+    },
+
+    hideProxyPickerResults(rowId) {
+        const container = document.querySelector(`[data-proxy-picker-results="${rowId}"]`);
+        if (container) container.classList.add('hidden');
+    },
+
+    // Click-outside-to-close, registered once. Deliberately NOT a blur/setTimeout
+    // race on the input -- that trick depends on blur firing strictly before the
+    // result button's click, which is unreliable in practice (especially touch,
+    // where a tap synthesizes blur before the click event lands) and made results
+    // intermittently unclickable.
+    attachProxyPickerOutsideClickHandler() {
+        if (this.proxyPickerOutsideClickAttached) return;
+        this.proxyPickerOutsideClickAttached = true;
+        document.addEventListener('click', (event) => {
+            document.querySelectorAll('.proxy-picker-results:not(.hidden)').forEach((container) => {
+                const rowId = container.dataset.proxyPickerResults;
+                const input = document.querySelector(`[data-proxy-picker="${rowId}"]`);
+                if (container.contains(event.target) || event.target === input) return;
+                container.classList.add('hidden');
+            });
+        });
+    },
+
+    // Step 1 (category) and step 2 (type) of the picker are real <select>s, so read
+    // them straight from the DOM -- their change handlers run before updateSROIRow().
+    getProxyFilters(rowId) {
+        const read = field => document.querySelector(`select[data-sroi-row="${rowId}"][data-sroi-field="${field}"]`)?.value || '';
+        return { category: read('proxyCategory'), proxyType: read('proxyType') };
+    },
+
+    // Category/type changed: if the list is open, redraw it for the new filters.
+    refreshProxyPicker(rowId) {
+        const container = document.querySelector(`[data-proxy-picker-results="${rowId}"]`);
+        if (container && !container.classList.contains('hidden')) this.renderProxyPickerResults(rowId, '');
+    },
+
+    renderProxyPickerResults(rowId, query) {
+        const container = document.querySelector(`[data-proxy-picker-results="${rowId}"]`);
+        if (!container) return;
+        container.classList.remove('hidden');
+
+        const otherButton = `
+            <button type="button" class="proxy-picker-item proxy-picker-other" onclick="appState.openManualProxy('${rowId}')">
+                <span class="font-semibold">+ อื่น ๆ (กรอกเอง)</span>
+                <span class="text-xs text-gray-500">ไม่พบตัวชี้วัดที่ต้องการ? เพิ่มค่าแทนมูลค่าเองได้</span>
+            </button>`;
+
+        if (!this.proxyLibraryLoaded) {
+            container.innerHTML = '<div class="proxy-picker-empty">กำลังโหลด...</div>';
+            return;
+        }
+
+        // No cap while just browsing (empty query) -- the container already scrolls.
+        // Only cap once the user is narrowing down with a typed query.
+        const filters = this.getProxyFilters(rowId);
+        const allMatches = searchFinancialProxyLibrary(this.proxyLibraryEntries, query, filters);
+        const matches = query.trim() ? allMatches.slice(0, 8) : allMatches;
+        const isFiltered = !!(filters.category || filters.proxyType);
+
+        const summary = `<div class="proxy-picker-summary">แสดง ${matches.length} จาก ${this.proxyLibraryEntries.length} รายการ${isFiltered ? ' (กรองตามหมวดหมู่/ประเภทที่เลือก -- เลือก "ทุกหมวดหมู่/ทุกประเภท" เพื่อดูทั้งหมด)' : ''}</div>`;
+        const items = matches.length
+            ? matches.map(entry => `
+                <button type="button" class="proxy-picker-item" onclick="appState.selectProxyLibraryEntry('${rowId}', '${entry.id}')">
+                    <span class="font-semibold">${this.escapeHTML(entry.indicator_th)}</span>
+                    <span class="text-xs text-gray-500">${this.escapeHTML(PROXY_TYPE_LABELS[entry.proxy_type] || entry.proxy_type)} · ${this.formatMoney(representativeAmount(entry))} ${this.escapeHTML(entry.unit)}</span>
+                </button>`).join('')
+            : '<div class="proxy-picker-empty">ไม่พบ proxy ที่ตรงกับตัวกรอง/คำค้นหา</div>';
+
+        container.innerHTML = summary + items + otherButton;
+    },
+
+    selectProxyLibraryEntry(rowId, entryId) {
+        const entry = this.proxyLibraryEntries.find(item => item.id === entryId);
+        const row = this.sroiRows.find(item => item.id === rowId);
+        if (!entry || !row) {
+            console.warn('selectProxyLibraryEntry: could not find', { rowId, entryId, entryFound: !!entry, rowFound: !!row });
+            return;
+        }
+        row.outcomeDescription = entry.indicator_th;
+        row.proxyCategory = entry.category || row.proxyCategory;
+        row.proxyType = entry.proxy_type;
+        row.monetaryValue = representativeAmount(entry);
+        row.valueUnit = unitDenominator(entry.unit) || row.valueUnit;
+        row.proxyLibraryId = entry.id;
+        row.proxyLibraryLabel = entry.indicator_th;
+        row.proxyUnitLabel = entry.unit;
+        row.proxySubmission = '';
+        // Only prefill notes/source fields if the user hasn't already written their own --
+        // these are a starting point (still editable), not meant to clobber real notes.
+        if (!row.valuationApproach.trim() && entry.source_note) {
+            row.valuationApproach = entry.source_note;
+        }
+        if (!row.indicatorSource.trim()) {
+            row.indicatorSource = [entry.indicator_en, entry.source_note].filter(Boolean).join(' -- ');
+        }
+        this.renderSROIRows();
+        this.scheduleSave();
+        this.updateLiveSummary();
+    },
+
+    // "Other": the indicator isn't in the library, so the user enters their own proxy.
+    // It goes to a SEPARATE submissions table for admin screening, never the curated library.
+    openManualProxy(rowId) {
+        this.manualProxyRows.add(rowId);
+        this.renderSROIRows();
+        document.querySelector(`[data-manual-panel="${rowId}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    },
+
+    closeManualProxy(rowId) {
+        this.manualProxyRows.delete(rowId);
+        this.renderSROIRows();
+    },
+
+    renderManualProxyPanel(row) {
+        const field = name => `data-manual-proxy="${row.id}" data-manual-field="${name}"`;
+        const category = row.proxyCategory || 'other';
+        const proxyType = row.proxyType || 'other';
+        return `
+            <div class="proxy-manual-panel mt-4" data-manual-panel="${row.id}">
+                <h5 class="font-bold text-gray-900"><i class="fa-solid fa-pen-to-square text-chula mr-2"></i>อื่น ๆ: เพิ่มค่าแทนมูลค่าเอง</h5>
+                <p class="text-sm text-gray-700 mt-1">กรณีที่ตัวชี้วัดที่ท่านต้องการไม่ปรากฏในระบบ ท่านสามารถเพิ่มค่าแทนมูลค่าเองได้</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+                    <div class="md:col-span-3">
+                        <label class="form-label">ชื่อตัวชี้วัด / ค่าแทนมูลค่า *</label>
+                        <input type="text" class="form-control" ${field('indicator')} placeholder="เช่น ค่าเดินทางไปโรงพยาบาลที่ลดลง">
+                    </div>
+                    <div>
+                        <label class="form-label">หมวดหมู่ปัจจัยผลกระทบทางสังคม</label>
+                        <select class="form-control" ${field('category')}>
+                            ${Object.entries(PROXY_CATEGORY_LABELS).map(([value, label]) => `<option value="${value}" ${category === value ? 'selected' : ''}>${this.escapeHTML(label)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">ประเภท Financial Proxy</label>
+                        <select class="form-control" ${field('proxyType')}>
+                            ${Object.entries(PROXY_TYPE_LABELS).map(([value, label]) => `<option value="${value}" ${proxyType === value ? 'selected' : ''}>${this.escapeHTML(label)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="form-label">มูลค่า (บาท) *</label>
+                            <input type="number" min="0" step="any" class="form-control text-right font-mono" ${field('amount')} placeholder="0.00">
+                        </div>
+                        <div>
+                            <label class="form-label">ต่อ (หน่วย) *</label>
+                            <input type="text" class="form-control" list="sroi-unit-options" autocomplete="off" ${field('unit')} value="${this.escapeHTML(row.valueUnit)}">
+                        </div>
+                    </div>
+                    <div class="md:col-span-3">
+                        <label class="form-label">ที่มา / วิธีคำนวณ</label>
+                        <textarea rows="2" class="form-control resize-none" ${field('sourceNote')} placeholder="เช่น 2 คน x 6 พื้นที่ x 78,000 บาท/ปี (แหล่งข้อมูล ปี)"></textarea>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mt-3"><i class="fa-solid fa-circle-info text-chula mr-1"></i>Financial proxy ที่ท่านกรอกเข้ามาจะถูกเก็บไว้และนำไปศึกษาเพื่อพัฒนาระบบต่อไปในอนาคต</p>
+                <p class="text-sm text-red-600 mt-2 hidden" data-manual-error="${row.id}"></p>
+                <div class="flex flex-wrap gap-3 mt-3">
+                    <button type="button" onclick="appState.submitManualProxy('${row.id}')" class="bg-chula hover:bg-chula-dark text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">ใช้ค่านี้และส่งเข้าคลังเพื่อตรวจสอบ</button>
+                    <button type="button" onclick="appState.closeManualProxy('${row.id}')" class="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">ยกเลิก</button>
+                </div>
+            </div>`;
+    },
+
+    async submitManualProxy(rowId) {
+        const row = this.sroiRows.find(item => item.id === rowId);
+        if (!row) return;
+        const read = name => document.querySelector(`[data-manual-proxy="${rowId}"][data-manual-field="${name}"]`)?.value ?? '';
+        const indicator = read('indicator').trim();
+        const unit = read('unit').trim();
+        const amount = parseFloat(read('amount'));
+        const errorEl = document.querySelector(`[data-manual-error="${rowId}"]`);
+
+        const problems = [];
+        if (!indicator) problems.push('ชื่อตัวชี้วัด');
+        if (!(amount >= 0)) problems.push('มูลค่า');
+        if (!unit) problems.push('หน่วย');
+        if (problems.length) {
+            if (errorEl) {
+                errorEl.textContent = `กรุณากรอก: ${problems.join(', ')}`;
+                errorEl.classList.remove('hidden');
+            }
+            return;
+        }
+
+        const category = read('category') || 'other';
+        const proxyType = read('proxyType') || 'other';
+        const sourceNote = read('sourceNote').trim();
+
+        // The row keeps the user's values whether or not the submission succeeds.
+        const result = await submitCustomFinancialProxy({ indicator, category, proxyType, amount, unit, sourceNote });
+        if (!result.ok) console.warn('Could not submit custom financial proxy:', result.error);
+
+        row.outcomeDescription = indicator;
+        row.proxyCategory = category;
+        row.proxyType = proxyType;
+        row.monetaryValue = amount;
+        row.valueUnit = unit;
+        row.proxyLibraryId = null;
+        row.proxyLibraryLabel = `${indicator} (กรอกเอง)`;
+        row.proxyUnitLabel = `บาท/${unit}`;
+        row.proxySubmission = result.ok ? 'sent' : 'failed';
+        if (sourceNote) row.valuationApproach = sourceNote;
+        if (!row.indicatorSource.trim()) row.indicatorSource = `${indicator} (ค่าแทนมูลค่าที่ผู้ใช้กรอกเอง)`;
+
+        this.manualProxyRows.delete(rowId);
+        this.renderSROIRows();
         this.scheduleSave();
         this.updateLiveSummary();
     },
@@ -3038,41 +3662,44 @@ export const appState = {
     },
 
     calculateSROIRow(row) {
-        const investment = Math.max(0, this.parseNumberValue(row.investment));
-        const quantity = Math.max(0, this.parseNumberValue(row.quantity));
+        // Cost is project-level (calculateSROI); a row only carries value.
+        const quantity = this.getRowQuantity(row);
         const monetaryValue = Math.max(0, this.parseNumberValue(row.monetaryValue));
-        const duration = Math.max(1, Math.min(6, Math.round(this.parseNumberValue(row.duration) || 1)));
+        const duration = Math.max(1, Math.min(5, Math.round(this.parseNumberValue(row.duration) || 1)));
         const discountRate = this.clampPercent(row.discountRate);
-        const deadweight = this.clampPercent(row.deadweight);
-        const displacement = this.clampPercent(row.displacement);
-        const attribution = this.clampPercent(row.attribution);
-        const dropoff = this.clampPercent(row.dropoff);
-        const startOffset = row.outcomeStart === 'period-after' ? 1 : 0;
+        const deadweight = adjustmentFraction(row, 'deadweight', quantity);
+        const displacement = adjustmentFraction(row, 'displacement', quantity);
+        const attribution = adjustmentFraction(row, 'attribution', quantity);
+        const dropoff = adjustmentFraction(row, 'dropoff', quantity);
+        const startOffset = Math.max(0, Math.min(5, Math.round(this.parseNumberValue(row.startYear) || 0)));
         const adjustedAnnualValue = quantity * monetaryValue * (1 - deadweight) * (1 - displacement) * (1 - attribution);
         const yearlyValues = [];
+        const benefitYearly = []; // after adjustments and drop-off, before discounting
         let totalPV = 0;
 
         for (let calendarYear = 0; calendarYear < 6; calendarYear++) {
             if (calendarYear < startOffset) {
                 yearlyValues.push(0);
+                benefitYearly.push(0);
                 continue;
             }
 
             const activeYear = calendarYear - startOffset;
             if (activeYear >= duration) {
                 yearlyValues.push(0);
+                benefitYearly.push(0);
                 continue;
             }
 
             const droppedValue = adjustedAnnualValue * Math.pow(1 - dropoff, activeYear);
             const presentValue = droppedValue / Math.pow(1 + discountRate, calendarYear);
+            benefitYearly.push(droppedValue);
             yearlyValues.push(presentValue);
             totalPV += presentValue;
         }
 
         return {
             row,
-            investment,
             quantity,
             monetaryValue,
             duration,
@@ -3081,30 +3708,96 @@ export const appState = {
             displacement,
             attribution,
             dropoff,
+            startOffset,
             adjustedAnnualValue,
             yearlyValues,
-            totalPV,
-            netPresentValue: totalPV - investment,
-            sroiRatio: investment > 0 ? totalPV / investment : 0
+            benefitYearly,
+            totalPV
         };
     },
 
     calculateSROI() {
         const rows = this.getActiveSROIRows().map(row => this.calculateSROIRow(row));
-        const investment = rows.reduce((sum, row) => sum + row.investment, 0);
+        const investment = this.getProjectInvestment();
         const totalPV = rows.reduce((sum, row) => sum + row.totalPV, 0);
         const adjustedAnnualValue = rows.reduce((sum, row) => sum + row.adjustedAnnualValue, 0);
         const yearlyValues = Array.from({ length: 6 }, (_, index) => rows.reduce((sum, row) => sum + row.yearlyValues[index], 0));
+
+        const benefitYearly = Array.from({ length: 6 }, (_, index) => rows.reduce((sum, row) => sum + row.benefitYearly[index], 0));
 
         return {
             rows,
             investment,
             adjustedAnnualValue,
+            benefitYearly,
             totalPV,
             netPresentValue: totalPV - investment,
             sroiRatio: investment > 0 ? totalPV / investment : 0,
             yearlyValues
         };
+    },
+
+    // Year-by-year table in the shape of the ARM workbooks (t across the top): cost at t=0,
+    // each outcome row's benefit after adjustments, the discount factor, and its present value.
+    // Shown to everyone -- it is a result, unlike the formula text, which stays admin-only.
+    renderYearlyTable(calc = this.calculateSROI()) {
+        const years = [0, 1, 2, 3, 4, 5];
+        const cell = (value, cls = '') => `<td class="px-2 py-1.5 text-right font-mono whitespace-nowrap ${cls}">${value ? this.formatMoney(value) : '<span class="text-gray-300">-</span>'}</td>`;
+        const rate = calc.rows.length && calc.rows.every(r => r.discountRate === calc.rows[0].discountRate) ? calc.rows[0].discountRate : null;
+        const label = (result, index) => {
+            const names = this.rowStakeholderNames(result.row);
+            const name = result.row.pathwayOutcome || result.row.outcomeDescription || result.row.stakeholderGroup || `Outcome row ${index + 1}`;
+            return `<span class="font-semibold">${this.escapeHTML(name)}</span>${names.length ? `<span class="block text-gray-500">${this.escapeHTML(names.join(', '))}</span>` : ''}`;
+        };
+        const section = title => `<tr class="bg-gray-100"><td class="px-2 py-1.5 font-bold text-gray-800" colspan="${years.length + 2}">${title}</td></tr>`;
+        const totalRow = (title, values, total, cls = 'bg-white font-bold') =>
+            `<tr class="border-t ${cls}"><td class="px-2 py-1.5">${title}</td>${values.map(v => cell(v)).join('')}${cell(total, 'font-bold')}</tr>`;
+
+        const costValues = years.map(y => (y === 0 ? calc.investment : 0));
+        const benefitRows = calc.rows.map((result, index) => `
+            <tr class="border-t"><td class="px-2 py-1.5">${label(result, index)}</td>${result.benefitYearly.map(v => cell(v)).join('')}${cell(result.benefitYearly.reduce((a, b) => a + b, 0), 'font-semibold')}</tr>`).join('');
+        const pvRows = calc.rows.map((result, index) => `
+            <tr class="border-t"><td class="px-2 py-1.5">${label(result, index)}</td>${result.yearlyValues.map(v => cell(v)).join('')}${cell(result.totalPV, 'font-semibold')}</tr>`).join('');
+        const factorRow = rate === null
+            ? `<tr class="border-t"><td class="px-2 py-1.5" colspan="${years.length + 2}">Present value factor: แต่ละแถวใช้ discount rate ไม่เท่ากัน</td></tr>`
+            : `<tr class="border-t"><td class="px-2 py-1.5">Present value factor (discount rate ${(rate * 100).toFixed(2)}%)</td>${years.map(y => `<td class="px-2 py-1.5 text-right font-mono">${(1 / Math.pow(1 + rate, y)).toFixed(4)}</td>`).join('')}<td></td></tr>`;
+
+        if (!calc.rows.length) {
+            return '<p class="text-sm text-gray-500 italic">ยังไม่มี outcome row ที่นำมาคำนวณ</p>';
+        }
+        return `
+            <div class="overflow-x-auto border border-gray-200 rounded-xl bg-white">
+                <table class="w-full text-xs">
+                    <thead class="bg-white">
+                        <tr>
+                            <th class="px-2 py-2 text-left">รายการ (บาท)</th>
+                            ${years.map(y => `<th class="px-2 py-2 text-right whitespace-nowrap">ปีที่ ${y}</th>`).join('')}
+                            <th class="px-2 py-2 text-right">รวม</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${section('ต้นทุนโครงการ (Cost)')}
+                        ${totalRow('ต้นทุนรวมจากแหล่งทุน (ลงทุนที่ปีที่ 0)', costValues, calc.investment)}
+                        ${section('ผลประโยชน์หลังปรับ Deadweight / Displacement / Attribution / Drop-off (ก่อนคิดมูลค่าปัจจุบัน)')}
+                        ${benefitRows}
+                        ${totalRow('รวมผลประโยชน์', calc.benefitYearly, calc.benefitYearly.reduce((a, b) => a + b, 0))}
+                        ${section('มูลค่าปัจจุบันของผลประโยชน์ (Present Value)')}
+                        ${factorRow}
+                        ${pvRows}
+                        ${totalRow('รวมมูลค่าปัจจุบัน (Total PV)', calc.yearlyValues, calc.totalPV)}
+                        <tr class="border-t bg-gray-50 font-bold"><td class="px-2 py-2">NPV = Total PV − ต้นทุน</td><td class="px-2 py-2 text-right font-mono" colspan="${years.length + 1}">${this.formatMoney(calc.netPresentValue)}</td></tr>
+                        <tr class="border-t bg-chula bg-opacity-10 font-bold"><td class="px-2 py-2">SROI ratio = Total PV ÷ ต้นทุน</td><td class="px-2 py-2 text-right font-mono" colspan="${years.length + 1}">1 : ${calc.sroiRatio.toFixed(2)}</td></tr>
+                    </tbody>
+                </table>
+            </div>`;
+    },
+
+    updateYearlyTables(calc) {
+        const html = this.renderYearlyTable(calc);
+        ['sroi-yearly-table', 'r_yearly_table'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
     },
 
     calculateSROIPreview() {
@@ -3116,14 +3809,15 @@ export const appState = {
         if (pvEl) pvEl.innerText = `${this.formatMoney(calc.totalPV)} บาท`;
         if (npvEl) npvEl.innerText = `${this.formatMoney(calc.netPresentValue)} บาท`;
         this.updateFormulaBreakdown(calc);
+        this.updateYearlyTables(calc);
+        this.renderSROIRail();
         this.updateLiveSummary();
     },
 
     validateSROIRow(result) {
         const row = result.row;
         const messages = [];
-        const groupSize = this.parseNumberValue(row.groupSize);
-        const quantity = this.parseNumberValue(row.quantity);
+        const quantity = result.quantity;
         const duration = this.parseNumberValue(row.duration);
         const percentageFields = [
             ['deadweight', 'Deadweight'],
@@ -3133,18 +3827,24 @@ export const appState = {
             ['discountRate', 'Discount rate']
         ];
 
-        if (result.investment <= 0) messages.push('กรอกมูลค่าการลงทุนรวม');
-        if (quantity <= 0) messages.push('กรอกจำนวนผู้ได้รับ outcome');
-        if (result.monetaryValue <= 0) messages.push('กรอกมูลค่าต่อคนต่อปี');
-        if (duration < 1 || duration > 6) messages.push('ระยะเวลา outcome ต้องอยู่ระหว่าง 1-6 ปี');
-        if (groupSize > 0 && quantity > groupSize) messages.push('จำนวนผู้ได้รับ outcome มากกว่าขนาด stakeholder group');
-        if (row.weighting !== '' && (this.parseNumberValue(row.weighting) < 1 || this.parseNumberValue(row.weighting) > 10)) {
-            messages.push('น้ำหนักความสำคัญควรอยู่ระหว่าง 1-10');
-        }
+        if (this.getProjectInvestment() <= 0) messages.push('ยังไม่มีต้นทุน: กรอกแหล่งทุนและจำนวนเงินที่ Impact Pathway (ขั้นที่ 3)');
+        const unit = this.unitText(row.valueUnit);
+        if (!this.rowStakeholderNames(row).length) messages.push('เลือกผู้มีส่วนได้ส่วนเสียที่ได้รับ outcome อย่างน้อย 1 กลุ่ม (จำนวนดึงจากขั้นที่ 3)');
+        else if (quantity <= 0) messages.push(`จำนวนที่ได้รับ outcome เป็น 0: กรอกจำนวนของกลุ่มที่เลือกที่ขั้นที่ 3 (${unit})`);
+        if (!row.pathwayOutcome) messages.push('เลือก Outcome ที่สร้างผลลัพธ์และผลกระทบจาก Impact Pathway');
+        if (result.monetaryValue <= 0) messages.push('กรอกมูลค่าที่เป็นตัวเงินต่อหนึ่งหน่วยผลลัพธ์');
+        if (duration < 1 || duration > 5) messages.push('ระยะเวลา outcome ต้องอยู่ระหว่าง 1-5 ปี');
         percentageFields.forEach(([field, label]) => {
             const value = this.parseNumberValue(row[field]);
-            if (value < 0 || value > 100) messages.push(`${label} ต้องอยู่ระหว่าง 0-100%`);
+            const asNumber = row[`${field}Mode`] === 'number';
+            if (value < 0) messages.push(`${label} ต้องไม่ติดลบ`);
+            else if (asNumber && value > quantity) messages.push(`${label} (จำนวน) ต้องไม่เกินจำนวนผู้ได้รับ outcome`);
+            else if (!asNumber && value > 100) messages.push(`${label} ต้องอยู่ระหว่าง 0-100%`);
         });
+        const startYear = this.parseNumberValue(row.startYear);
+        if (startYear + duration > 6) {
+            messages.push(`เริ่มปีที่ ${startYear} + ระยะเวลา ${duration} ปี เกินขอบเขต 6 ปีที่ระบบรองรับ ปีที่เกินจะไม่ถูกนำมาคำนวณ`);
+        }
         return messages;
     },
 
@@ -3204,7 +3904,13 @@ export const appState = {
         return allMessages;
     },
 
+    // The formula/PV-by-year panel is for admins only; everyone else sees the results.
+    applyRoleVisibility() {
+        document.getElementById('formula-admin-panel')?.classList.toggle('hidden', !isAdmin(this.identity));
+    },
+
     updateFormulaBreakdown(calc = this.calculateSROI()) {
+        this.applyRoleVisibility();
         const container = document.getElementById('formula-breakdown');
         if (!container) return;
         const yearCards = calc.yearlyValues.map((value, index) => `
@@ -3218,7 +3924,7 @@ export const appState = {
             return `
             <tr class="border-t">
                 <td class="px-2 py-1">Row ${rowNumber}</td>
-                <td class="px-2 py-1">${this.escapeHTML(result.row.stakeholderGroup || result.row.outcomeDescription || '-')}</td>
+                <td class="px-2 py-1">${this.escapeHTML(result.row.pathwayOutcome || this.rowStakeholderNames(result.row).join(', ') || result.row.outcomeDescription || '-')}</td>
                 <td class="px-2 py-1 text-right font-mono">${this.formatMoney(result.adjustedAnnualValue)}</td>
                 <td class="px-2 py-1 text-right font-mono">${this.formatMoney(result.totalPV)}</td>
             </tr>
@@ -3326,17 +4032,18 @@ export const appState = {
         this.setText('r_quote', this.getValue('sv_quote') || 'ไม่มีข้อมูลสัมภาษณ์');
 
         const calc = this.calculateSROI();
+        this.updateYearlyTables(calc);
         const rowContainer = document.getElementById('r_sroi_rows');
         if (rowContainer) {
             rowContainer.innerHTML = calc.rows.map((result, index) => `
                 <div class="report-cell">
                     <strong class="report-label">SROI row ${index + 1}</strong>
                     <div class="space-y-1">
-                        <p><span class="font-semibold">Stakeholder:</span> ${this.escapeHTML(result.row.stakeholderGroup || '-')} (${this.formatNumber(this.parseNumberValue(result.row.groupSize))} คน)</p>
-                        <p><span class="font-semibold">Input/output:</span> ${this.escapeHTML(result.row.inputDescription || '-')} / ${this.escapeHTML(result.row.outputSummary || '-')}</p>
+                        <p><span class="font-semibold">Stakeholder:</span> ${this.escapeHTML(this.rowStakeholderNames(result.row).join(', ') || '-')} (${this.formatNumber(result.quantity)} ${this.escapeHTML(this.unitText(result.row.valueUnit))})</p>
+                        <p><span class="font-semibold">Outcome / Impact:</span> ${this.escapeHTML(result.row.pathwayOutcome || '-')}</p>
                         <p><span class="font-semibold">Outcome:</span> ${this.escapeHTML(result.row.outcomeDescription || '-')}</p>
-                        <p><span class="font-semibold">Depth/weighting:</span> ${this.escapeHTML(result.row.changeDepth || '-')} / ${this.escapeHTML(result.row.weighting || '-')}</p>
-                        <p><span class="font-semibold">PV:</span> ${this.formatMoney(result.totalPV)} บาท · <span class="font-semibold">Investment:</span> ${this.formatMoney(result.investment)} บาท</p>
+                        <p><span class="font-semibold">Depth:</span> ${this.escapeHTML(result.row.changeDepth || '-')}</p>
+                        <p><span class="font-semibold">PV:</span> ${this.formatMoney(result.totalPV)} บาท</p>
                     </div>
                 </div>
             `).join('');
@@ -3484,6 +4191,154 @@ export const appState = {
     updateProjectHeader() {
         const projectName = this.getValue('m_projectName').trim();
         this.setText('project-title-chip', projectName || 'ยังไม่ได้ตั้งชื่อโครงการ');
+    },
+
+    // ---- Step 6: the report -- one long web page on screen, A4 pages in the PDF (lib/reportPages.js) ---
+
+    /** Everything the report shows, as plain data gathered from steps 1-5 and the SROI results. */
+    collectReportModel() {
+        const calc = this.calculateSROI();
+        const targets = this.getSDGTargetsState();
+        const reasons = {};
+        document.querySelectorAll('.sdg-reason').forEach(note => { reasons[note.dataset.sdgId] = note.value; });
+
+        const sdgs = Array.from(document.querySelectorAll('.sdg-checkbox:checked'), checkbox => {
+            const id = Number(checkbox.dataset.sdgId);
+            const info = SDGs_LIST.find(item => item.id === id);
+            return {
+                id,
+                title: info?.title ?? checkbox.value,
+                reason: reasons[checkbox.dataset.sdgId] ?? '',
+                targets: targets[checkbox.dataset.sdgId] ?? []
+            };
+        }).sort((a, b) => a.id - b.id);
+
+        const team = (this.projectMeta?.project_members ?? [])
+            .map(member => String(member.member_name ?? '').trim() || String(member.member_email ?? '').trim())
+            .filter(Boolean);
+
+        const lat = this.getValue('m_lat');
+        const lng = this.getValue('m_lng');
+        const bound = field => Number.parseFloat(this.getValue(field));
+        const bounds = [bound('m_bounds_north'), bound('m_bounds_south'), bound('m_bounds_east'), bound('m_bounds_west')].every(Number.isFinite)
+            ? { north: bound('m_bounds_north'), south: bound('m_bounds_south'), east: bound('m_bounds_east'), west: bound('m_bounds_west') }
+            : null;
+
+        return {
+            name: this.getValue('m_projectName').trim() || 'ไม่ได้ระบุชื่อโครงการ',
+            responsible: this.getValue('m_responsible').trim(),
+            department: this.getValue('m_department').trim(),
+            area: this.getValue('m_area').trim(),
+            supportYear: this.getValue('m_support_year'),
+            category: this.getValue('m_project_category'),
+            objectives: this.parseObjectiveText(this.getValue('m_objective')),
+            team,
+            location: { type: this.getValue('m_location_type') || 'pin', lat, lng, bounds },
+            sdgs,
+            pathway: {
+                inputs: this.pathwayRows.inputs,
+                stakeholders: this.pathwayRows.stakeholders,
+                outcomes: this.pathwayRows.outcomes,
+                knowledge: this.getValue('i_knowledge'),
+                activities: this.getValue('i_activities'),
+                output: this.getValue('i_output'),
+                outputSdg: this.getValue('i_output_sdg'),
+                impactEconomic: this.getValue('i_impact_economic'),
+                impactSocial: this.getValue('i_impact_social'),
+                impactEnvironment: this.getValue('i_impact_environment'),
+                toc: this.getValue('i_toc_statement'),
+                indicatorOutput: this.getValue('i_indicator_output'),
+                indicatorOutcome: this.getValue('i_indicator_outcome'),
+                indicatorImpact: this.getValue('i_indicator_impact')
+            },
+            site: { takeaway: this.getValue('sv_key_takeaway'), quote: this.getValue('sv_quote') },
+            photos: (this.activityImages ?? []).filter(image => image?.src).map(image => ({
+                src: image.src,
+                cropX: Number.isFinite(Number(image.cropX)) ? Number(image.cropX) : 50,
+                cropY: Number.isFinite(Number(image.cropY)) ? Number(image.cropY) : 50
+            })),
+            results: summariseResults(calc),
+            calcYearly: calc.yearlyValues,
+            rows: calc.rows.map(result => ({
+                stakeholders: this.rowStakeholderNames(result.row).join(', '),
+                outcome: result.row.pathwayOutcome || result.row.outcomeDescription || '',
+                quantity: result.quantity,
+                unit: this.unitText(result.row.valueUnit),
+                monetaryValue: result.monetaryValue,
+                deadweight: result.deadweight,
+                displacement: result.displacement,
+                attribution: result.attribution,
+                dropoff: result.dropoff,
+                duration: result.duration,
+                startYear: result.startOffset,
+                discountRate: result.discountRate,
+                totalPV: result.totalPV,
+                benefitYearly: result.benefitYearly,
+                yearlyValues: result.yearlyValues,
+                depth: result.row.changeDepth || '',
+                valuation: result.row.proxyLibraryLabel || result.row.valuationApproach || '',
+                indicator: result.row.indicatorSource || ''
+            })),
+            generatedOn: formatThaiDate(new Date())
+        };
+    },
+
+    /** Draw the report for the current view into #report-stage as one long web page. */
+    renderReportView() {
+        const stage = document.getElementById('report-stage');
+        if (!stage || this.currentStep !== this.totalSteps) return;
+        try {
+            renderReportWeb(stage, this.collectReportModel(), this.reportView);
+        } catch (error) {
+            // The report is a view of already-saved data: a drawing problem must never block the step.
+            console.error('Could not draw the report', error);
+        }
+        this.syncReportControls();
+    },
+
+    /** The switch's pressed state and the download button's wording follow the current view. */
+    syncReportControls() {
+        const full = this.reportView === 'full';
+        document.querySelectorAll('[data-report-view]').forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.reportView === this.reportView));
+        });
+        const label = document.getElementById('btn-download-report-label');
+        if (label) label.textContent = full ? 'ดาวน์โหลดรายงานฉบับเต็ม' : 'ดาวน์โหลดรายงานฉบับสรุป';
+    },
+
+    setReportView(view) {
+        this.reportView = view === 'full' ? 'full' : 'summary';
+        this.syncReportControls();
+        this.renderReportView();
+    },
+
+    async downloadReport() {
+        const button = document.getElementById('btn-download-report');
+        const label = document.getElementById('btn-download-report-label');
+        if (!button || button.disabled) return;
+
+        button.disabled = true;
+        if (label) label.textContent = 'กำลังสร้าง PDF...';
+        const fileName = `${this.reportView === 'full' ? 'SROI_Full_Report' : 'SROI_Summary'}_${safeFileName(this.getValue('m_projectName'))}.pdf`;
+
+        // The PDF is A4 pages laid out off-screen (rendered, but out of sight) from the same
+        // blocks as the web view; the web view itself is not paginated.
+        const holder = document.createElement('div');
+        holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${PAGE_W}px;pointer-events:none;`;
+        document.body.append(holder);
+        try {
+            const pages = await renderReportPages(holder, this.collectReportModel(), this.reportView);
+            await exportPagesToPdf(pages, fileName, (done, total) => {
+                if (label) label.textContent = `กำลังสร้าง PDF... (${done}/${total})`;
+            });
+        } catch (error) {
+            console.error('Could not create the report PDF', error);
+            alert('สร้างไฟล์ PDF ไม่สำเร็จ กรุณาลองอีกครั้ง (Could not create the PDF)');
+        } finally {
+            holder.remove();
+            button.disabled = false;
+            this.syncReportControls();
+        }
     },
 
     exportPDF() {
@@ -3690,7 +4545,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const identity = Object.freeze({
             userId: 'local-input-form-test',
             email: 'input-form-test@local.test',
-            role: 'researcher',
+            role: urlParams.get('role') === 'admin' ? 'admin' : 'researcher',
             displayName: 'Input Form Test'
         });
 
