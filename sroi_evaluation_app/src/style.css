@@ -1467,3 +1467,224 @@ body .leaflet-touch .leaflet-bar a { font-family: inherit; }
     @apply hidden lg:block absolute -left-[1.4rem] top-1/2 -mt-1.5 w-2.5 h-2.5 rounded-full bg-white border-2 border-gray-300;
 }
 .sroi-rail-add-icon { @apply flex items-center justify-center w-6 h-6 rounded-full bg-chula text-white text-sm leading-none; }
+
+/* ===== Step 6: report as A4 landscape paper pages ================================== */
+/* Built by src/lib/reportPages.js from one set of blocks, shown two ways:
+   .rp-web   the on-screen report: one long, ordinary web page that wraps to the window
+   .rp-page  an A4 landscape sheet (1123 x 794 px at 96 dpi), laid out off-screen only when the
+             PDF is downloaded; the export photographs those sheets
+   Both use the same rp- classes. Text sizes are px times --rp-fs so relative sizes hold. */
+.rp-switch {
+  display: inline-flex;
+  padding: 0.25rem;
+  gap: 0.25rem;
+  background: #f3e9ed;
+  border-radius: 9999px;
+}
+.rp-switch button {
+  padding: 0.45rem 1.1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #6b7280;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.rp-switch button:hover { color: #9f2147; }
+.rp-switch button[aria-pressed="true"] {
+  background: #fff;
+  color: #9f2147;
+  box-shadow: 0 2px 8px -2px rgba(159, 33, 71, 0.35);
+}
+/* ---- on-screen version: one long web page ---- */
+.rp-web {
+  --rp-accent: #9f2147;
+  --rp-fs: 1.15;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #1f2937;
+  font-size: calc(12.5px * var(--rp-fs));
+  line-height: 1.6;
+  text-align: left;
+}
+.rp-web *, .rp-web *::before, .rp-web *::after { box-sizing: border-box; }
+.rp-web p, .rp-web h1, .rp-web h2, .rp-web h3, .rp-web h4, .rp-web ul, .rp-web ol { margin: 0; }
+.rp-web .rp-block { gap: 16px; }
+.rp-web .rp-card { overflow-x: auto; padding: 16px 20px; }
+.rp-web .rp-table-rows { min-width: 920px; }
+.rp-web .rp-table-years { min-width: 640px; }
+.rp-web-foot { padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: calc(9.5px * var(--rp-fs)); color: #9ca3af; text-align: center; }
+@media (max-width: 900px) {
+  .rp-web .rp-row, .rp-web .rp-row-summary, .rp-web .rp-row-results, .rp-web .rp-pair, .rp-web .rp-triple, .rp-web .rp-minis { grid-template-columns: 1fr; }
+  .rp-web .rp-figs { grid-template-columns: 1fr 1fr; }
+  .rp-web .rp-hero { flex-direction: column; align-items: flex-start; }
+  .rp-web .rp-ratio { padding-left: 0; border-left: 0; text-align: left; }
+  .rp-web .rp-ratio-note { margin-left: 0; }
+  .rp-web .rp-sdg-full, .rp-web .rp-sdg-summary { flex-direction: column; align-items: flex-start; }
+  .rp-web .rp-sdg-legend { grid-template-columns: 1fr; }
+  .rp-web .rp-h2 { font-size: calc(19px * var(--rp-fs)); }
+}
+
+.rp-page {
+  --rp-accent: #9f2147;
+  /* Text scale for the whole sheet: every font size below is its base px size times this, so the
+     relative sizes stay as designed. 1.45 puts body text at about 14 pt on the printed A4 page. */
+  --rp-fs: 1.45;
+  width: 1123px;
+  height: 794px;
+  box-sizing: border-box;
+  padding: 12px 34px 10px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: #1f2937;
+  font-size: calc(12.5px * var(--rp-fs));
+  line-height: 1.6;
+  text-align: left;
+}
+.rp-page *, .rp-page *::before, .rp-page *::after { box-sizing: border-box; }
+.rp-page p, .rp-page h1, .rp-page h2, .rp-page h3, .rp-page h4, .rp-page ul, .rp-page ol { margin: 0; }
+.rp-head, .rp-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: calc(10.5px * var(--rp-fs));
+  color: #6b7280;
+  flex: 0 0 auto;
+}
+.rp-head { padding-bottom: 6px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+.rp-head span:first-child { font-weight: 700; color: var(--rp-accent); flex: 0 0 auto; }
+.rp-head-title { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.rp-foot { padding-top: 6px; margin-top: 10px; border-top: 1px solid #e5e7eb; font-size: calc(9.5px * var(--rp-fs)); color: #9ca3af; }
+.rp-pageno { font-weight: 700; color: #6b7280; min-width: 4.5em; text-align: right; }
+.rp-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.rp-block { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.rp-body > * { flex: 0 0 auto; }
+
+.rp-h2 { display: flex; align-items: center; gap: 10px; font-size: calc(21px * var(--rp-fs)); font-weight: 700; line-height: 1.5; color: #111827; }
+.rp-h2-num { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--rp-accent); color: #fff; font-size: calc(15px * var(--rp-fs)); }
+.rp-h2-cont { font-size: calc(14px * var(--rp-fs)); font-weight: 400; color: #6b7280; }
+
+.rp-card { border: 1px solid #ece3e6; border-radius: 14px; padding: 11px 15px; background: #fff; min-width: 0; }
+.rp-card-title { font-size: calc(13.5px * var(--rp-fs)); font-weight: 700; line-height: 1.5; padding-left: 9px; margin-bottom: 8px !important; border-left: 3px solid var(--rp-accent); color: #111827; }
+.rp-sub { font-size: calc(12.5px * var(--rp-fs)); font-weight: 700; margin: 10px 0 4px !important; padding-left: 8px; border-left: 3px solid var(--rp-accent); }
+.rp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; }
+.rp-row-summary { grid-template-columns: 1.15fr 1fr; }
+.rp-row-results { grid-template-columns: 1.1fr 1fr; }
+.rp-stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rp-triple { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+.rp-list { padding-left: 18px; list-style: disc; }
+.rp-list li { margin: 2px 0; overflow-wrap: anywhere; }
+.rp-ol { list-style: decimal; }
+.rp-text { overflow-wrap: anywhere; }
+.rp-text + .rp-text { margin-top: 6px; }
+.rp-italic { font-style: italic; }
+.rp-empty { color: #9ca3af; font-style: italic; }
+.rp-caption { margin-top: 6px !important; font-size: calc(10.5px * var(--rp-fs)); color: #6b7280; display: flex; align-items: center; gap: 4px; }
+.rp-pin { flex: 0 0 auto; }
+
+/* project card */
+.rp-hero { display: flex; align-items: center; gap: 18px; padding: 11px 18px; border: 1px solid #f0d3dc; border-radius: 16px; background: linear-gradient(120deg, #fff 30%, #fdeef3 100%); }
+.rp-logo { flex: 0 0 auto; width: 104px; padding: 8px; background: #fff; border: 1px solid #f0d3dc; border-radius: 14px; }
+.rp-logo img { display: block; width: 100%; height: auto; }
+.rp-hero-main { flex: 1 1 auto; min-width: 0; }
+.rp-eyebrow { font-size: calc(10px * var(--rp-fs)); font-weight: 700; letter-spacing: 0.14em; color: var(--rp-accent); }
+.rp-title { font-size: calc(19px * var(--rp-fs)); font-weight: 700; line-height: 1.5; color: #111827; overflow-wrap: anywhere; }
+.rp-resp { font-size: calc(12.5px * var(--rp-fs)); font-weight: 700; color: #111827; }
+.rp-resp b { color: var(--rp-accent); }
+.rp-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 2px; }
+.rp-chips-label { font-size: calc(11px * var(--rp-fs)); color: #6b7280; }
+.rp-chip { padding: 0 9px; border-radius: 9999px; background: #fdeaf0; font-size: calc(10.5px * var(--rp-fs)); line-height: 1.7; color: #374151; }
+.rp-chip b { color: var(--rp-accent); }
+.rp-meta { display: flex; align-items: center; gap: 4px; font-size: calc(11px * var(--rp-fs)); color: #6b7280; }
+.rp-ratio { flex: 0 0 auto; padding-left: 20px; border-left: 1px solid #f0d3dc; text-align: right; }
+.rp-ratio-label { font-size: calc(11px * var(--rp-fs)); color: #6b7280; }
+.rp-ratio-value { font-size: calc(40px * var(--rp-fs)); line-height: 1.25; font-weight: 700; color: var(--rp-accent); }
+.rp-ratio-value span { font-size: calc(16px * var(--rp-fs)); font-weight: 400; color: #6b7280; }
+.rp-ratio-note { max-width: 210px; margin-left: auto; font-size: calc(10.5px * var(--rp-fs)); color: #6b7280; }
+
+/* impact pathway */
+.rp-minis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.rp-mini { min-width: 0; padding: 7px 10px 8px; border-top: 3px solid var(--t); border-radius: 8px; background: var(--tb); }
+.rp-mini-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+.rp-mini-en { font-size: calc(9.5px * var(--rp-fs)); font-weight: 700; letter-spacing: 0.06em; color: var(--t); }
+.rp-mini-th { font-size: calc(10.5px * var(--rp-fs)); color: #6b7280; }
+.rp-mini .rp-list { margin-top: 2px; padding-left: 16px; font-size: calc(10px * var(--rp-fs)); line-height: 1.5; }
+.rp-mini .rp-empty { font-size: calc(10px * var(--rp-fs)); }
+.rp-tone-input        { --t: #3b6db5; --tb: #eef3fb; }
+.rp-tone-stakeholders { --t: #e98a2b; --tb: #fdf3e7; }
+.rp-tone-activities   { --t: #7d7d7d; --tb: #f3f3f3; }
+.rp-tone-output       { --t: #dfb221; --tb: #fbf6e6; }
+.rp-tone-outcome      { --t: #5b7bc7; --tb: #eef1fb; }
+.rp-tone-impact       { --t: #5aad5a; --tb: #eef7ee; }
+.rp-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rp-pair + .rp-pair { margin-top: 12px; }
+.rp-pbox { min-width: 0; display: flex; flex-direction: column; border: 1.5px solid var(--t); border-radius: 10px; overflow: hidden; background: var(--tb); }
+.rp-pbox-head { display: flex; align-items: baseline; gap: 8px; padding: 4px 12px; background: var(--t); color: #fff; font-size: calc(13.5px * var(--rp-fs)); line-height: 1.6; }
+.rp-pbox-head span { font-size: calc(9.5px * var(--rp-fs)); letter-spacing: 0.12em; opacity: 0.9; }
+.rp-pbox-body { padding: 7px 12px 8px; font-size: calc(12px * var(--rp-fs)); }
+.rp-pbox-body .rp-list { padding-left: 16px; }
+
+/* result figures */
+.rp-figs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.rp-fig { padding: 5px 12px; border-top: 3px solid var(--f); border-radius: 10px; background: var(--fb); }
+.rp-fig-label { font-size: calc(10.5px * var(--rp-fs)); color: #6b7280; }
+.rp-fig-value { font-size: calc(17px * var(--rp-fs)); line-height: 1.4; font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; }
+.rp-fig-value small { font-size: calc(10px * var(--rp-fs)); font-weight: 400; color: #6b7280; }
+.rp-fig-blue   { --f: #3b6db5; --fb: #eef3fb; }
+.rp-fig-green  { --f: #2f9e6b; --fb: #eef8f2; }
+.rp-fig-amber  { --f: #d99a1e; --fb: #fdf6e7; }
+.rp-fig-rose   { --f: #c2365d; --fb: #fcedf1; }
+.rp-fig-violet { --f: #7c5cc4; --fb: #f3effb; }
+
+/* SDGs */
+.rp-donut { position: relative; flex: 0 0 auto; }
+.rp-donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
+.rp-donut-label { font-size: calc(10.5px * var(--rp-fs)); font-weight: 700; color: #374151; white-space: nowrap; }
+.rp-donut-centre { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.25; }
+.rp-donut-centre strong { font-size: calc(22px * var(--rp-fs)); line-height: 1.2; color: #111827; }
+.rp-sdg-badge { display: inline-grid; place-items: center; flex: 0 0 auto; width: 21px; height: 21px; border-radius: 5px; color: #fff; font-size: calc(11px * var(--rp-fs)); font-weight: 700; line-height: 1; }
+.rp-sdg-summary { display: flex; align-items: center; gap: 18px; }
+.rp-sdg-legend { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: calc(11.5px * var(--rp-fs)); font-weight: 700; min-width: 0; }
+.rp-sdg-legend li { display: flex; align-items: center; gap: 8px; }
+.rp-sdg-full { display: flex; align-items: flex-start; gap: 22px; }
+.rp-sdg-list { list-style: none; padding: 0; flex: 1 1 auto; min-width: 0; }
+.rp-sdg-item { display: flex; gap: 10px; margin-bottom: 9px; }
+.rp-sdg-item:last-child { margin-bottom: 0; }
+.rp-sdg-item strong { font-size: calc(13px * var(--rp-fs)); }
+.rp-sdg-item p { font-size: calc(11.5px * var(--rp-fs)); color: #4b5563; overflow-wrap: anywhere; }
+.rp-sdg-item .rp-sdg-targets { font-size: calc(10.5px * var(--rp-fs)); color: #9ca3af; }
+
+/* quote, map, photos */
+.rp-quote { font-style: italic; font-size: calc(13px * var(--rp-fs)); line-height: 1.7; color: #374151; overflow-wrap: anywhere; }
+.rp-row-summary .rp-quote { font-size: calc(12px * var(--rp-fs)); line-height: 1.6; }
+.rp-quote-by { margin-top: 6px !important; font-size: calc(11px * var(--rp-fs)); font-weight: 700; color: var(--rp-accent); }
+.rp-map { display: block; width: 100%; height: 150px; border-radius: 10px; }
+.rp-photos { display: grid; gap: 8px; }
+.rp-photo { position: relative; margin: 0; border-radius: 9px; overflow: hidden; background: #f3e7ec; }
+.rp-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.rp-photo figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 8px 4px; font-size: calc(10px * var(--rp-fs)); color: #fff; background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0)); }
+
+/* tables */
+.rp-table { width: 100%; border-collapse: collapse; font-size: calc(11.5px * var(--rp-fs)); line-height: 1.5; }
+.rp-table th { padding: 5px 7px; text-align: left; font-weight: 700; background: #faf4f6; color: #374151; border-bottom: 1px solid #ecdde2; }
+.rp-table td { padding: 4px 7px; border-top: 1px solid #f0eaec; vertical-align: top; overflow-wrap: anywhere; }
+.rp-table .rp-n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rp-table .rp-c { text-align: center; }
+.rp-table tr.rp-hi td { background: #fbeef2; color: var(--rp-accent); font-weight: 700; }
+.rp-table tr.rp-sec td { background: #f6f3f4; font-weight: 700; }
+.rp-table-kv { border-collapse: separate; border-spacing: 0; border: 1px solid #eee7ea; }
+.rp-table-kv td { border: 0; border-bottom: 1px solid #eee7ea; padding: 5px 10px; }
+.rp-table-kv tr:last-child td { border-bottom: 0; }
+.rp-table-kv td:last-child { text-align: right; font-weight: 700; white-space: nowrap; }
+.rp-table-rows { font-size: calc(10px * var(--rp-fs)); }
+.rp-table-rows th { text-align: center; padding: 4px 4px; }
+.rp-table-years th:not(:first-child) { text-align: right; }
+.rp-sub-line { display: block; font-size: calc(10px * var(--rp-fs)); color: #6b7280; }
+.rp-dash { color: #d1d5db; }
+.rp-basis { padding-left: 20px; display: grid; gap: 8px; font-size: calc(11.5px * var(--rp-fs)); }
+.rp-basis p { color: #4b5563; overflow-wrap: anywhere; }

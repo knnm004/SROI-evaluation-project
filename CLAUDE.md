@@ -54,6 +54,8 @@ Vanilla JS + Vite multi-page app. No framework, no router, no state library.
   - `format.js` — `escapeHTML`, money/number, Thai date-time, `formatUpdatedMeta`
   - `assessmentSnapshot.js` — the one canonical save/load shape
 
+**Step 6 report (`reportPages.js`, `reportData.js`).** One list of report *blocks* (summary or full, switched by `appState.reportView` / `setReportView()`), built from `appState.collectReportModel()`, is shown two ways: on screen as **one long web page** (`renderReportWeb()` into `#report-stage`, responsive, no page breaks), and for the download as **A4-landscape pages** laid out off-screen only when `downloadReport()` runs (`renderReportPages()` → `paginate()` measures real layout, keeps the blocks' order, splits long lists/tables, and squeezes a block that misses a page by <12%; `exportPagesToPdf()` rasterises the pages with `html2canvas` and assembles them with `jsPDF`, both imported lazily and direct dependencies). Change content once in the blocks and both surfaces follow. All styling is the `rp-` block at the end of `style.css` (`.rp-web` = screen, `.rp-page` = paper; text sizes are px × `--rp-fs`). The old classic report markup stays hidden in `#report-container` only because the step-5 recheck modal copies its `innerHTML` (`showRecheckModal`); `exportPDF()` (html2pdf) is no longer wired to a button.
+
 `escapeHTML`, `formatMoney` and `formatNumber` are re-attached to `appState` as methods so the many `this.escapeHTML(...)` calls inside its template strings keep working.
 
 **CDN globals, not bundled:** Leaflet is `window.L` (unpkg, in `index.html`); Font Awesome from cdnjs. A new Leaflet feature uses that global, not an import.

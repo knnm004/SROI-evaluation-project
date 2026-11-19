@@ -1,6 +1,6 @@
 import html2pdf from 'html2pdf.js';
 import { supabase } from './lib/supabaseClient.js';
-import { escapeHTML, formatMoney, formatNumber, formatUpdatedMeta } from './lib/format.js';
+import { escapeHTML, formatMoney, formatNumber, formatThaiDate, formatUpdatedMeta } from './lib/format.js';
 import { loadIdentity, signInWithGoogle, signInWithPassword, signOut } from './lib/session.js';
 import {
     isAdmin,
@@ -27,6 +27,8 @@ import {
     refreshOutcomes,
     pathwayReportHTML
 } from './lib/pathwayLists.js';
+import { summariseResults, safeFileName } from './lib/reportData.js';
+import { renderReportWeb, renderReportPages, exportPagesToPdf, PAGE_W } from './lib/reportPages.js';
 import { initLandingSections } from './lib/landingSections.js';
 import { initLandingPhotoWall } from './lib/landingPhotoWall.js';
 import {
@@ -328,6 +330,8 @@ export const appState = {
     uploadedImage: null,
     activityImages: [],
     isViewMode: false,
+    // Step 6: which report is showing ('summary' | 'full').
+    reportView: 'summary',
     // The add-a-row lists of step 3 (inputs / stakeholders / outcomes); shape in lib/pathwayData.js.
     pathwayRows: emptyPathway(),
     /** The switch in the recheck modal, as last saved: true/false, or null = never asked. */
@@ -1162,6 +1166,7 @@ export const appState = {
         if (this.currentStep === this.totalSteps) {
             formNav.classList.add('hidden');
             this.generateReport();
+            this.renderReportView();
 
             // Step 6 is only ever reached after confirmAndSave() already ran from the
             // step-5 recheck modal -- there is no save button here (see index.html).
@@ -4186,6 +4191,154 @@ export const appState = {
     updateProjectHeader() {
         const projectName = this.getValue('m_projectName').trim();
         this.setText('project-title-chip', projectName || 'ยังไม่ได้ตั้งชื่อโครงการ');
+    },
+
+    // ---- Step 6: the report -- one long web page on screen, A4 pages in the PDF (lib/reportPages.js) ---
+
+    /** Everything the report shows, as plain data gathered from steps 1-5 and the SROI results. */
+    collectReportModel() {
+        const calc = this.calculateSROI();
+        const targets = this.getSDGTargetsState();
+        const reasons = {};
+        document.querySelectorAll('.sdg-reason').forEach(note => { reasons[note.dataset.sdgId] = note.value; });
+
+        const sdgs = Array.from(document.querySelectorAll('.sdg-checkbox:checked'), checkbox => {
+            const id = Number(checkbox.dataset.sdgId);
+            const info = SDGs_LIST.find(item => item.id === id);
+            return {
+                id,
+                title: info?.title ?? checkbox.value,
+                reason: reasons[checkbox.dataset.sdgId] ?? '',
+                targets: targets[checkbox.dataset.sdgId] ?? []
+            };
+        }).sort((a, b) => a.id - b.id);
+
+        const team = (this.projectMeta?.project_members ?? [])
+            .map(member => String(member.member_name ?? '').trim() || String(member.member_email ?? '').trim())
+            .filter(Boolean);
+
+        const lat = this.getValue('m_lat');
+        const lng = this.getValue('m_lng');
+        const bound = field => Number.parseFloat(this.getValue(field));
+        const bounds = [bound('m_bounds_north'), bound('m_bounds_south'), bound('m_bounds_east'), bound('m_bounds_west')].every(Number.isFinite)
+            ? { north: bound('m_bounds_north'), south: bound('m_bounds_south'), east: bound('m_bounds_east'), west: bound('m_bounds_west') }
+            : null;
+
+        return {
+            name: this.getValue('m_projectName').trim() || 'ไม่ได้ระบุชื่อโครงการ',
+            responsible: this.getValue('m_responsible').trim(),
+            department: this.getValue('m_department').trim(),
+            area: this.getValue('m_area').trim(),
+            supportYear: this.getValue('m_support_year'),
+            category: this.getValue('m_project_category'),
+            objectives: this.parseObjectiveText(this.getValue('m_objective')),
+            team,
+            location: { type: this.getValue('m_location_type') || 'pin', lat, lng, bounds },
+            sdgs,
+            pathway: {
+                inputs: this.pathwayRows.inputs,
+                stakeholders: this.pathwayRows.stakeholders,
+                outcomes: this.pathwayRows.outcomes,
+                knowledge: this.getValue('i_knowledge'),
+                activities: this.getValue('i_activities'),
+                output: this.getValue('i_output'),
+                outputSdg: this.getValue('i_output_sdg'),
+                impactEconomic: this.getValue('i_impact_economic'),
+                impactSocial: this.getValue('i_impact_social'),
+                impactEnvironment: this.getValue('i_impact_environment'),
+                toc: this.getValue('i_toc_statement'),
+                indicatorOutput: this.getValue('i_indicator_output'),
+                indicatorOutcome: this.getValue('i_indicator_outcome'),
+                indicatorImpact: this.getValue('i_indicator_impact')
+            },
+            site: { takeaway: this.getValue('sv_key_takeaway'), quote: this.getValue('sv_quote') },
+            photos: (this.activityImages ?? []).filter(image => image?.src).map(image => ({
+                src: image.src,
+                cropX: Number.isFinite(Number(image.cropX)) ? Number(image.cropX) : 50,
+                cropY: Number.isFinite(Number(image.cropY)) ? Number(image.cropY) : 50
+            })),
+            results: summariseResults(calc),
+            calcYearly: calc.yearlyValues,
+            rows: calc.rows.map(result => ({
+                stakeholders: this.rowStakeholderNames(result.row).join(', '),
+                outcome: result.row.pathwayOutcome || result.row.outcomeDescription || '',
+                quantity: result.quantity,
+                unit: this.unitText(result.row.valueUnit),
+                monetaryValue: result.monetaryValue,
+                deadweight: result.deadweight,
+                displacement: result.displacement,
+                attribution: result.attribution,
+                dropoff: result.dropoff,
+                duration: result.duration,
+                startYear: result.startOffset,
+                discountRate: result.discountRate,
+                totalPV: result.totalPV,
+                benefitYearly: result.benefitYearly,
+                yearlyValues: result.yearlyValues,
+                depth: result.row.changeDepth || '',
+                valuation: result.row.proxyLibraryLabel || result.row.valuationApproach || '',
+                indicator: result.row.indicatorSource || ''
+            })),
+            generatedOn: formatThaiDate(new Date())
+        };
+    },
+
+    /** Draw the report for the current view into #report-stage as one long web page. */
+    renderReportView() {
+        const stage = document.getElementById('report-stage');
+        if (!stage || this.currentStep !== this.totalSteps) return;
+        try {
+            renderReportWeb(stage, this.collectReportModel(), this.reportView);
+        } catch (error) {
+            // The report is a view of already-saved data: a drawing problem must never block the step.
+            console.error('Could not draw the report', error);
+        }
+        this.syncReportControls();
+    },
+
+    /** The switch's pressed state and the download button's wording follow the current view. */
+    syncReportControls() {
+        const full = this.reportView === 'full';
+        document.querySelectorAll('[data-report-view]').forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.reportView === this.reportView));
+        });
+        const label = document.getElementById('btn-download-report-label');
+        if (label) label.textContent = full ? 'ดาวน์โหลดรายงานฉบับเต็ม' : 'ดาวน์โหลดรายงานฉบับสรุป';
+    },
+
+    setReportView(view) {
+        this.reportView = view === 'full' ? 'full' : 'summary';
+        this.syncReportControls();
+        this.renderReportView();
+    },
+
+    async downloadReport() {
+        const button = document.getElementById('btn-download-report');
+        const label = document.getElementById('btn-download-report-label');
+        if (!button || button.disabled) return;
+
+        button.disabled = true;
+        if (label) label.textContent = 'กำลังสร้าง PDF...';
+        const fileName = `${this.reportView === 'full' ? 'SROI_Full_Report' : 'SROI_Summary'}_${safeFileName(this.getValue('m_projectName'))}.pdf`;
+
+        // The PDF is A4 pages laid out off-screen (rendered, but out of sight) from the same
+        // blocks as the web view; the web view itself is not paginated.
+        const holder = document.createElement('div');
+        holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${PAGE_W}px;pointer-events:none;`;
+        document.body.append(holder);
+        try {
+            const pages = await renderReportPages(holder, this.collectReportModel(), this.reportView);
+            await exportPagesToPdf(pages, fileName, (done, total) => {
+                if (label) label.textContent = `กำลังสร้าง PDF... (${done}/${total})`;
+            });
+        } catch (error) {
+            console.error('Could not create the report PDF', error);
+            alert('สร้างไฟล์ PDF ไม่สำเร็จ กรุณาลองอีกครั้ง (Could not create the PDF)');
+        } finally {
+            holder.remove();
+            button.disabled = false;
+            this.syncReportControls();
+        }
     },
 
     exportPDF() {
