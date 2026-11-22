@@ -28,6 +28,7 @@ import {
     pathwayReportHTML
 } from './lib/pathwayLists.js';
 import { summariseResults, safeFileName } from './lib/reportData.js';
+import { buildLocationMap } from './lib/reportMap.js';
 import { renderReportWeb, renderReportPages, exportPagesToPdf, PAGE_W } from './lib/reportPages.js';
 import { initLandingSections } from './lib/landingSections.js';
 import { initLandingPhotoWall } from './lib/landingPhotoWall.js';
@@ -332,6 +333,7 @@ export const appState = {
     isViewMode: false,
     // Step 6: which report is showing ('summary' | 'full').
     reportView: 'summary',
+    reportMapCache: new Map(), // location choice -> map picture (data URL) or null if it could not be made
     // The add-a-row lists of step 3 (inputs / stakeholders / outcomes); shape in lib/pathwayData.js.
     pathwayRows: emptyPathway(),
     /** The switch in the recheck modal, as last saved: true/false, or null = never asked. */
@@ -4233,7 +4235,15 @@ export const appState = {
             category: this.getValue('m_project_category'),
             objectives: this.parseObjectiveText(this.getValue('m_objective')),
             team,
-            location: { type: this.getValue('m_location_type') || 'pin', lat, lng, bounds },
+            location: {
+                type: this.getValue('m_location_type') || 'pin',
+                lat,
+                lng,
+                bounds,
+                // The outlines picked in "boundary" mode, and the map picture made from the choice (if ready).
+                boundaries: (this.getValue('m_location_type') === 'boundary' ? this.getBoundarySelection() : []).map(item => item.geometry),
+                mapImage: this.reportMapCache.get(this.reportMapKey()) ?? null
+            },
             sdgs,
             pathway: {
                 inputs: this.pathwayRows.inputs,
@@ -4283,6 +4293,29 @@ export const appState = {
         };
     },
 
+    /** What the map picture depends on: the choice made in step 1. */
+    reportMapKey() {
+        return JSON.stringify([
+            this.getValue('m_location_type'), this.getValue('m_lat'), this.getValue('m_lng'),
+            this.getValue('m_bounds_north'), this.getValue('m_bounds_south'), this.getValue('m_bounds_east'), this.getValue('m_bounds_west'),
+            this.getValue('m_boundary_selection_json')
+        ]);
+    },
+
+    /** Make (once per choice) the real map picture for the report; resolves whether or not it worked. */
+    async ensureReportMap() {
+        const key = this.reportMapKey();
+        if (this.reportMapCache.has(key)) return;
+        const location = this.collectReportModel().location;
+        let image = null;
+        try {
+            image = await buildLocationMap(location);
+        } catch (error) {
+            console.warn('Could not make the report map', error);
+        }
+        this.reportMapCache.set(key, image);
+    },
+
     /** Draw the report for the current view into #report-stage as one long web page. */
     renderReportView() {
         const stage = document.getElementById('report-stage');
@@ -4294,6 +4327,13 @@ export const appState = {
             console.error('Could not draw the report', error);
         }
         this.syncReportControls();
+
+        // The map picture needs the network: draw the report now, then again once the map is ready.
+        if (!this.reportMapCache.has(this.reportMapKey())) {
+            this.ensureReportMap().then(() => {
+                if (this.currentStep === this.totalSteps) this.renderReportView();
+            });
+        }
     },
 
     /** The switch's pressed state and the download button's wording follow the current view. */
@@ -4319,6 +4359,7 @@ export const appState = {
 
         button.disabled = true;
         if (label) label.textContent = 'กำลังสร้าง PDF...';
+        await this.ensureReportMap(); // so the PDF has the real map even if it was asked for straight away
         const fileName = `${this.reportView === 'full' ? 'SROI_Full_Report' : 'SROI_Summary'}_${safeFileName(this.getValue('m_projectName'))}.pdf`;
 
         // The PDF is A4 pages laid out off-screen (rendered, but out of sight) from the same
