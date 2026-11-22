@@ -20,6 +20,7 @@
 
 import { escapeHTML as esc, formatMoney, formatNumber } from './format.js';
 import { SDG_COLORS, textLines } from './reportData.js';
+import { rasteriseElement } from './domRaster.js';
 
 export const PAGE_W = 1123; // A4 landscape at 96 dpi (297 mm)
 export const PAGE_H = 794;  // (210 mm)
@@ -157,11 +158,45 @@ function sdgDonut(sdgs, size = 150) {
 
 const sdgBadge = sdg => `<span class="rp-sdg-badge" style="background:${SDG_COLORS[sdg.id] ?? '#9f2147'}">${sdg.id}</span>`;
 
-function photoGrid(photos, columns, rowHeight, withNumbers = false) {
-    return `<div class="rp-photos" style="grid-template-columns:repeat(${columns},1fr);grid-auto-rows:${rowHeight}px">${
-        photos.map((photo, index) => `
-            <figure class="rp-photo"><img src="${esc(photo.src)}" alt="" style="object-position:${photo.cropX}% ${photo.cropY}%">${
-                withNumbers ? `<figcaption>ภาพที่ ${index + 1}</figcaption>` : ''}</figure>`).join('')}</div>`;
+/**
+ * The activity photos, laid out symmetrically whatever their number: 1, 2 or 3 in one row; 4 as 2 x 2;
+ * 5 as 3 + 2; 6 as 3 + 3. Rows are centred and every tile in a layout has the same size (3:2, cropped to
+ * fill, never squeezed), so the gallery stays tidy with 1 photo or 6.
+ */
+function photoRowsFor(count) {
+    if (count <= 3) return [count];
+    if (count === 4) return [2, 2];
+    return count === 5 ? [3, 2] : [3, 3];
+}
+
+/** The gallery's rows ({photos, width}); every tile in a layout has the same width. */
+function galleryRows(photos) {
+    // Fewer photos get larger tiles: 1-2 at 40% of the width each, 2 x 2 at 38%, otherwise a third.
+    const width = photos.length <= 2 ? '40%' : (photos.length === 4 ? '38%' : 'calc((100% - 16px) / 3)');
+    let next = 0;
+    return photoRowsFor(photos.length).map(size => ({ photos: photos.slice(next, next += size), width }));
+}
+
+function galleryHTML(rows) {
+    return `<div class="rp-gallery" style="--tile-w:${rows[0].width}">${rows.map(row => `
+        <div class="rp-gallery-row">${row.photos.map(photo => `
+            <figure class="rp-photo"><img src="${esc(photo.src)}" alt="" style="object-position:${photo.cropX}% ${photo.cropY}%"></figure>`).join('')}</div>`).join('')}</div>`;
+}
+
+/**
+ * The photo card as a block. It can give way in two ways to keep pages full: its tiles shrink a little
+ * (down to 70%) to fit the space left on a page, and if that is not enough its rows continue on the next page.
+ */
+function photoBlock(model) {
+    if (!model.photos.length) {
+        return { html: () => card('ภาพกิจกรรม', '<p class="rp-empty">ยังไม่มีภาพกิจกรรม</p>') };
+    }
+    return {
+        items: galleryRows(model.photos),
+        minSplit: 1,
+        shrinkVar: { name: '--tile-k', floor: 0.7 },
+        html: (rows, continued) => card(continued ? 'ภาพกิจกรรม (ต่อ)' : 'ภาพกิจกรรม', galleryHTML(rows))
+    };
 }
 
 function locationCard(model) {
@@ -169,6 +204,12 @@ function locationCard(model) {
     const b = loc.bounds;
     const caption = [model.area, loc.lat && loc.lng ? `พิกัด ${Number(loc.lat).toFixed(4)}, ${Number(loc.lng).toFixed(4)}` : '']
         .filter(hasText).join(' · ');
+    // The real map of what the person chose in step 1 (see reportMap.js), when its tiles could be loaded.
+    if (loc.mapImage) {
+        return card('พื้นที่ดำเนินโครงการ', `
+            <img class="rp-map rp-map-img" src="${esc(loc.mapImage)}" alt="">
+            <p class="rp-caption">${PIN_SVG} ${esc(caption || 'ตำแหน่งที่เลือก')}</p>`, 'rp-card-map');
+    }
     const grid = [60, 120, 180, 240, 300, 360, 420, 480].map(x => `<line x1="${x}" y1="0" x2="${x}" y2="180"/>`).join('')
         + [45, 90, 135].map(y => `<line x1="0" y1="${y}" x2="540" y2="${y}"/>`).join('');
     const area = loc.type !== 'pin' && b
@@ -201,13 +242,6 @@ function sdgListItems(sdgs) {
 
 // ---- summary page -------------------------------------------------------------------------
 
-/** Columns and tile height for the summary's photo card: as large as the page allows, up to ~4:3. */
-function summaryPhotoLayout(count) {
-    const columns = count <= 3 ? Math.max(1, count) : (count === 4 ? 2 : 3);
-    const tileWidth = (1025 - 8 * (columns - 1)) / columns;
-    return { columns, rowHeight: Math.min(210, Math.round(tileWidth * 0.66)) };
-}
-
 /**
  * The summary as blocks for the same paginator as the full report. At the larger text size it
  * usually runs to two pages: nothing is cut or shortened to make it fit on one.
@@ -229,7 +263,6 @@ function summaryBlocks(model) {
         : '<li class="rp-empty">ไม่ได้ระบุ</li>';
 
     const story = String(model.site.takeaway || model.site.quote || '').trim();
-    const layout = summaryPhotoLayout(model.photos.length);
 
     const blocks = [
         { html: () => heroCard(model, 'SROI SUMMARY') },
@@ -241,16 +274,14 @@ function summaryBlocks(model) {
             ${figure('ผลประโยชน์สุทธิ', money(r.netBenefit), 'rose')}
             ${figure('IRR (ผลตอบแทนภายใน)', f.irr, 'violet')}
         </div>`) },
-        { html: () => `<div class="rp-row rp-row-summary">
-            ${card('ความสอดคล้องกับ SDGs', `<div class="rp-sdg-summary">${sdgDonut(model.sdgs, 96)}<ul class="rp-sdg-legend">${sdgLegend}</ul></div>`)}
+        { maxSqueeze: 0.25, html: () => `<div class="rp-row rp-row-summary">
+            ${card('ความสอดคล้องกับ SDGs', `<div class="rp-sdg-summary">${sdgDonut(model.sdgs, 64)}<ul class="rp-sdg-legend">${sdgLegend}</ul></div>`)}
             ${card('คุณค่าต่อชุมชนและท้องถิ่น', story
                 ? `<p class="rp-quote">“${esc(story)}”</p><p class="rp-quote-by">— สรุปจากการลงพื้นที่</p>`
                 : '<p class="rp-empty">ยังไม่มีข้อมูลจากการลงพื้นที่</p>')}
         </div>` }
     ];
-    if (model.photos.length) {
-        blocks.push({ html: () => card('ภาพกิจกรรม', photoGrid(model.photos, layout.columns, layout.rowHeight)) });
-    }
+    if (model.photos.length) blocks.push(photoBlock(model));
     return blocks;
 }
 
@@ -264,21 +295,35 @@ function infoBlocks(model) {
 
     const targetGroup = model.pathway.stakeholders.filter(row => hasText(row.name)).map(row =>
         `${esc(row.name.trim())}${hasText(row.count) ? ` (n = ${formatNumber(Number.parseFloat(row.count) || 0)})` : ''}`);
+    // Objectives (then the target group) are split item by item: with many objectives the first ones
+    // stay beside the map on this page and the rest continue on the next, instead of leaving this page empty.
+    const objectiveItems = [
+        ...(model.objectives.length ? model.objectives : ['ไม่ได้ระบุ']).map((text, index) => ({ text, number: index + 1 })),
+        ...(targetGroup.length ? [{ targetGroup: true }] : [])
+    ];
     blocks.push({
-        html: () => `<div class="rp-row">
-            ${card('วัตถุประสงค์โครงการ', `<ol class="rp-list rp-ol">${(model.objectives.length ? model.objectives : ['ไม่ได้ระบุ'])
-                .map(item => `<li>${esc(item)}</li>`).join('')}</ol>
-                ${targetGroup.length ? `<h4 class="rp-sub">กลุ่มเป้าหมาย</h4><ol class="rp-list rp-ol">${targetGroup.map(item => `<li>${item}</li>`).join('')}</ol>` : ''}`)}
-            ${locationCard(model)}
-        </div>`
+        items: objectiveItems,
+        minSplit: 1,
+        html: (items, continued) => {
+            const objectives = items.filter(item => item.text !== undefined);
+            const list = objectives.length
+                ? `<ol class="rp-list rp-ol" start="${objectives[0].number}">${objectives.map(item => `<li>${esc(item.text)}</li>`).join('')}</ol>`
+                : '';
+            const group = items.some(item => item.targetGroup)
+                ? `<h4 class="rp-sub">กลุ่มเป้าหมาย</h4><ol class="rp-list rp-ol">${targetGroup.map(item => `<li>${item}</li>`).join('')}</ol>`
+                : '';
+            const text = card(continued ? 'วัตถุประสงค์โครงการ (ต่อ)' : 'วัตถุประสงค์โครงการ', list + group);
+            return continued ? text : `<div class="rp-row">${text}${locationCard(model)}</div>`;
+        }
     });
 
     // SDGs (split by SDG)
     blocks.push({
         items: model.sdgs,
         minSplit: 1,
+        maxSqueeze: 0.2, // this card may shrink a little more, to stay on page 1 under the project details
         html: (items, continued) => items.length
-            ? card('ความสอดคล้องกับ SDGs', `<div class="rp-sdg-full">${continued ? '' : sdgDonut(model.sdgs, 150)}<ul class="rp-sdg-list">${sdgListItems(items)}</ul></div>`)
+            ? card('ความสอดคล้องกับ SDGs', `<div class="rp-sdg-full">${continued ? '' : sdgDonut(model.sdgs, 100)}<ul class="rp-sdg-list">${sdgListItems(items)}</ul></div>`)
             : card('ความสอดคล้องกับ SDGs', '<p class="rp-empty">ไม่ได้เลือกเป้าหมาย SDGs</p>')
     });
 
@@ -342,11 +387,7 @@ function resultBlocks(model) {
             ${card('การแปลผลตัวเลข SROI', `<ul class="rp-list">${interpretation.map(line => `<li>${line}</li>`).join('')}</ul>`)}
         </div>`
     });
-    blocks.push({
-        html: () => card('ภาพกิจกรรม', model.photos.length
-            ? photoGrid(model.photos, Math.min(3, model.photos.length), 150, true)
-            : '<p class="rp-empty">ยังไม่มีภาพกิจกรรม</p>')
-    });
+    blocks.push(photoBlock(model));
 
     // site visit text (split by paragraph), then the focus-group quote
     const paragraphs = String(model.site.takeaway ?? '').split(/\r?\n+/).map(item => item.trim()).filter(Boolean);
@@ -462,39 +503,53 @@ function pageFrame(model, number) {
     page.innerHTML = `
         <header class="rp-head"><span>ระบบประเมินผลตอบแทนทางสังคม · Chula Triple S Platform</span><span class="rp-head-title">${esc(model.name)}</span></header>
         <div class="rp-body"></div>
-        <footer class="rp-foot"><span>รายงานสร้างวันที่ ${esc(model.generatedOn)}</span><span>แหล่งข้อมูล: metadata โครงการ · SDG · SROI Calculator</span><span class="rp-pageno">หน้า ${number}</span></footer>`;
+        <footer class="rp-foot"><span>รายงานสร้างวันที่ ${esc(model.generatedOn)}</span><span class="rp-pageno">หน้า ${number}</span></footer>`;
     return page;
 }
 
 const overflows = body => body.scrollHeight > body.clientHeight + 1;
 
-/** Scale a block down about its top-left corner and give the freed height back to the page. */
-function scaleBlock(el, scale) {
-    const height = el.offsetHeight;
-    el.style.transformOrigin = 'top left';
-    el.style.transform = `scale(${scale})`;
-    el.style.width = `${100 / scale}%`;
-    el.style.marginBottom = `${-(height * (1 - scale))}px`;
+/**
+ * Make a block (already in the page's body) a little smaller by lowering its text-size scale
+ * (--rp-fs), step by step, until the page no longer overflows; `floor` is the smallest fraction of
+ * the normal size allowed. Returns whether it now fits. A CSS variable rather than a transform:
+ * Safari places transformed elements wrongly inside the SVG the PDF is drawn through.
+ */
+function fitByTextScale(el, body, floor) {
+    const base = Number.parseFloat(getComputedStyle(el).getPropertyValue('--rp-fs')) || 1;
+    for (let factor = 0.95; factor >= floor - 1e-9; factor -= 0.05) {
+        el.style.setProperty('--rp-fs', String(base * factor));
+        if (!overflows(body)) return true;
+    }
+    el.style.removeProperty('--rp-fs');
+    return false;
 }
 
-/** Too tall for even an empty page: scale the block down (rare -- keeps every word rather than clipping). */
+/** Lower a CSS variable (1 -> floor, in 5% steps) on the block until the page stops overflowing. */
+function fitByVariable(el, body, name, floor) {
+    for (let value = 0.95; value >= floor - 1e-9; value -= 0.05) {
+        el.style.setProperty(name, value.toFixed(2));
+        if (!overflows(body)) return true;
+    }
+    el.style.removeProperty(name);
+    return false;
+}
+
+/** Too tall for even an empty page: shrink its text (rare -- keeps every word rather than clipping). */
 function shrinkToFit(el, body) {
-    const available = body.clientHeight;
-    const height = el.offsetHeight;
-    if (!height || height <= available) return;
-    scaleBlock(el, Math.max(0.55, available / height));
+    if (overflows(body) && !fitByTextScale(el, body, 0.55)) {
+        const base = Number.parseFloat(getComputedStyle(el).getPropertyValue('--rp-fs')) || 1;
+        el.style.setProperty('--rp-fs', String(base * 0.55));
+    }
 }
 
 /** A block that misses the page by a little is shrunk to fit instead of leaving the rest of the page empty. */
 const MAX_SQUEEZE = 0.12;
-function squeezeIn(el, body) {
+function squeezeIn(el, body, block) {
     body.append(el);
-    const overflow = body.scrollHeight - body.clientHeight;
-    const height = el.offsetHeight;
-    if (overflow > 0 && height && overflow / height <= MAX_SQUEEZE) {
-        scaleBlock(el, (height - overflow - 1) / height);
-        if (!overflows(body)) return true;
-    }
+    if (!overflows(body)) return true;
+    if (fitByTextScale(el, body, 1 - (block.maxSqueeze ?? MAX_SQUEEZE))) return true;
+    if (block.shrinkVar && fitByVariable(el, body, block.shrinkVar.name, block.shrinkVar.floor)) return true;
     el.remove();
     return false;
 }
@@ -534,12 +589,12 @@ function paginate(stage, model, blocks) {
             const el = make(items, continued);
             if (tryAppend(el)) break;                                   // fits here
 
+            if (body.children.length && squeezeIn(el, body, block)) break;     // misses by a little: shrink it in
             if (items && items.length > minSplit && body.children.length) { // long list/table: fill what is left of this page first
                 let count = items.length - 1;
                 while (count >= minSplit && !tryAppend(make(items.slice(0, count), continued))) count -= 1;
                 if (count >= minSplit) { items = items.slice(count); continued = true; newPage(); continue; }
             }
-            if (body.children.length && squeezeIn(el, body)) break;     // misses by a little: shrink it in
             if (body.children.length) { newPage(); continue; }          // try again on a fresh page
 
             if (items && items.length > 1) {                            // list/table too long for a page: split it
@@ -579,7 +634,7 @@ export function renderReportWeb(stage, model, mode) {
         `<div class="rp-block">${block.html(block.items ?? null, false)}</div>`).join('');
     const web = document.createElement('div');
     web.className = 'rp-web';
-    web.innerHTML = `${blocks}<p class="rp-web-foot">รายงานสร้างวันที่ ${esc(model.generatedOn)} · แหล่งข้อมูล: metadata โครงการ · SDG · SROI Calculator</p>`;
+    web.innerHTML = `${blocks}<p class="rp-web-foot">รายงานสร้างวันที่ ${esc(model.generatedOn)}</p>`;
     stage.replaceChildren(web);
     return web;
 }
@@ -602,13 +657,48 @@ export async function renderReportPages(stage, model, mode) {
 const imagesReady = root => Promise.all(Array.from(root.querySelectorAll('img')).map(img =>
     (img.complete && img.naturalWidth) ? null : new Promise(resolve => { img.onload = img.onerror = resolve; })));
 
+/** True if the canvas is (almost) all white: a failed drawing, not a page. */
+function looksBlank(canvas) {
+    const context = canvas.getContext('2d');
+    for (let index = 0; index < 400; index += 1) {
+        const x = Math.floor(Math.random() * canvas.width);
+        const y = Math.floor(Math.random() * canvas.height);
+        const [r, g, b] = context.getImageData(x, y, 1, 1).data;
+        if (r < 250 || g < 250 || b < 250) return false;
+    }
+    return true;
+}
+
 /**
- * One A4 landscape PDF page per report page. Each page is cloned off-screen at its real size
- * and rasterised at 2x, so text stays crisp when printed. `onProgress(done, total)` is called
- * after each page.
+ * A page as a canvas. The browser's own renderer first (exact text and picture placement, see
+ * domRaster.js); html2canvas only if that is not available or draws nothing.
+ */
+async function pageToCanvas(clone) {
+    try {
+        const canvas = await rasteriseElement(clone, { width: PAGE_W, height: PAGE_H, pixelRatio: 2 });
+        if (!looksBlank(canvas)) return canvas;
+    } catch (error) {
+        console.warn('Falling back to html2canvas for the PDF', error);
+    }
+    const { default: html2canvas } = await import('html2canvas');
+    return html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: PAGE_W,
+        height: PAGE_H,
+        windowWidth: PAGE_W,
+        logging: false
+    });
+}
+
+/**
+ * One A4 landscape PDF page per report page. Each page is cloned off-screen at its real size and
+ * photographed at 2x, so text stays crisp when printed. `onProgress(done, total)` is called after
+ * each page.
  */
 export async function exportPagesToPdf(pages, fileName, onProgress = () => {}) {
-    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+    const { jsPDF } = await import('jspdf');
 
     const holder = document.createElement('div');
     holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${PAGE_W}px;pointer-events:none;`;
@@ -624,17 +714,9 @@ export async function exportPagesToPdf(pages, fileName, onProgress = () => {}) {
             holder.replaceChildren(clone);
             await imagesReady(clone);
 
-            const canvas = await html2canvas(clone, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                width: PAGE_W,
-                height: PAGE_H,
-                windowWidth: PAGE_W,
-                logging: false
-            });
+            const canvas = await pageToCanvas(clone);
             if (index > 0) pdf.addPage('a4', 'landscape');
-            pdf.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
+            pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
             onProgress(index + 1, pages.length);
         }
         pdf.save(fileName);

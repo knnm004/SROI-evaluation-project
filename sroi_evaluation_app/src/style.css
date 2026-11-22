@@ -1498,7 +1498,9 @@ body .leaflet-touch .leaflet-bar a { font-family: inherit; }
 /* ---- on-screen version: one long web page ---- */
 .rp-web {
   --rp-accent: #9f2147;
-  --rp-fs: 1.15;
+  /* The site is used by many people over 40: body text is about 16.5 px, detail text about 17 px
+     and the smallest labels about 14.5 px. */
+  --rp-fs: 1.32;
   width: 100%;
   max-width: 1120px;
   margin: 0 auto;
@@ -1514,9 +1516,25 @@ body .leaflet-touch .leaflet-bar a { font-family: inherit; }
 .rp-web p, .rp-web h1, .rp-web h2, .rp-web h3, .rp-web h4, .rp-web ul, .rp-web ol { margin: 0; }
 .rp-web .rp-block { gap: 16px; }
 .rp-web .rp-card { overflow-x: auto; padding: 16px 20px; }
-.rp-web .rp-table-rows { min-width: 920px; }
-.rp-web .rp-table-years { min-width: 640px; }
-.rp-web-foot { padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: calc(9.5px * var(--rp-fs)); color: #9ca3af; text-align: center; }
+.rp-web .rp-table-rows { min-width: 1150px; }
+.rp-web .rp-table-years { min-width: 760px; }
+/* Detail text (the lists inside cards, the lines under the title) gets an extra step up on screen. */
+.rp-web .rp-mini .rp-list, .rp-web .rp-mini .rp-empty { font-size: calc(13px * var(--rp-fs)); }
+.rp-web .rp-pbox-body { font-size: calc(13px * var(--rp-fs)); }
+.rp-web .rp-meta { font-size: calc(13px * var(--rp-fs)); }
+.rp-web .rp-chip { font-size: calc(12.5px * var(--rp-fs)); }
+.rp-web .rp-table { font-size: calc(12.5px * var(--rp-fs)); }
+.rp-web .rp-table-rows { font-size: calc(11.5px * var(--rp-fs)); }
+.rp-web .rp-sdg-item p, .rp-web .rp-basis { font-size: calc(12.5px * var(--rp-fs)); }
+.rp-web .rp-figs { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.rp-web-foot { padding-top: 10px; border-top: 1px solid #e5e7eb; color: #9ca3af; text-align: center; }
+/* The smallest labels, on both surfaces, never go below about 14.5 px. */
+.rp-web .rp-eyebrow, .rp-web .rp-mini-en, .rp-web .rp-mini-th, .rp-web .rp-ratio-label, .rp-web .rp-ratio-note,
+.rp-web .rp-fig-label, .rp-web .rp-donut-label, .rp-web .rp-caption, .rp-web .rp-sdg-targets, .rp-web .rp-web-foot,
+.rp-web .rp-pbox-head span, .rp-web .rp-chips-label,
+.rp-page .rp-eyebrow, .rp-page .rp-mini-en, .rp-page .rp-mini-th, .rp-page .rp-ratio-label, .rp-page .rp-ratio-note,
+.rp-page .rp-fig-label, .rp-page .rp-donut-label, .rp-page .rp-caption, .rp-page .rp-sdg-targets, .rp-page .rp-foot,
+.rp-page .rp-head, .rp-page .rp-pbox-head span, .rp-page .rp-chips-label { font-size: calc(11px * var(--rp-fs)); }
 @media (max-width: 900px) {
   .rp-web .rp-row, .rp-web .rp-row-summary, .rp-web .rp-row-results, .rp-web .rp-pair, .rp-web .rp-triple, .rp-web .rp-minis { grid-template-columns: 1fr; }
   .rp-web .rp-figs { grid-template-columns: 1fr 1fr; }
@@ -1525,14 +1543,15 @@ body .leaflet-touch .leaflet-bar a { font-family: inherit; }
   .rp-web .rp-ratio-note { margin-left: 0; }
   .rp-web .rp-sdg-full, .rp-web .rp-sdg-summary { flex-direction: column; align-items: flex-start; }
   .rp-web .rp-sdg-legend { grid-template-columns: 1fr; }
+  .rp-web .rp-sdg-list { grid-template-columns: 1fr; }
   .rp-web .rp-h2 { font-size: calc(19px * var(--rp-fs)); }
 }
 
 .rp-page {
   --rp-accent: #9f2147;
   /* Text scale for the whole sheet: every font size below is its base px size times this, so the
-     relative sizes stay as designed. 1.45 puts body text at about 14 pt on the printed A4 page. */
-  --rp-fs: 1.45;
+     relative sizes stay as designed. 1.32 puts body text at about 12.4 pt on the printed A4 page. */
+  --rp-fs: 1.32;
   width: 1123px;
   height: 794px;
   box-sizing: border-box;
@@ -1642,19 +1661,24 @@ body .leaflet-touch .leaflet-bar a { font-family: inherit; }
 .rp-fig-violet { --f: #7c5cc4; --fb: #f3effb; }
 
 /* SDGs */
-.rp-donut { position: relative; flex: 0 0 auto; }
+/* No position:relative/absolute in the report: Safari mis-places positioned elements inside the SVG
+   foreignObject the PDF is drawn through, so overlays are stacked in one grid cell instead. */
+.rp-donut { display: grid; place-items: center; flex: 0 0 auto; }
+.rp-donut > svg { grid-area: 1 / 1; }
 .rp-donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
+/* In the summary the ring and its caption sit side by side, to keep that card short. */
+.rp-sdg-summary .rp-donut-wrap { flex-direction: row; gap: 10px; }
+.rp-sdg-summary .rp-donut-label { white-space: normal; max-width: 4.5em; line-height: 1.3; }
 .rp-donut-label { font-size: calc(10.5px * var(--rp-fs)); font-weight: 700; color: #374151; white-space: nowrap; }
-.rp-donut-centre { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.25; }
+.rp-donut-centre { grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.25; }
 .rp-donut-centre strong { font-size: calc(22px * var(--rp-fs)); line-height: 1.2; color: #111827; }
 .rp-sdg-badge { display: inline-grid; place-items: center; flex: 0 0 auto; width: 21px; height: 21px; border-radius: 5px; color: #fff; font-size: calc(11px * var(--rp-fs)); font-weight: 700; line-height: 1; }
 .rp-sdg-summary { display: flex; align-items: center; gap: 18px; }
 .rp-sdg-legend { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: calc(11.5px * var(--rp-fs)); font-weight: 700; min-width: 0; }
 .rp-sdg-legend li { display: flex; align-items: center; gap: 8px; }
 .rp-sdg-full { display: flex; align-items: flex-start; gap: 22px; }
-.rp-sdg-list { list-style: none; padding: 0; flex: 1 1 auto; min-width: 0; }
-.rp-sdg-item { display: flex; gap: 10px; margin-bottom: 9px; }
-.rp-sdg-item:last-child { margin-bottom: 0; }
+.rp-sdg-list { list-style: none; padding: 0; flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; align-content: start; }
+.rp-sdg-item { display: flex; gap: 10px; min-width: 0; }
 .rp-sdg-item strong { font-size: calc(13px * var(--rp-fs)); }
 .rp-sdg-item p { font-size: calc(11.5px * var(--rp-fs)); color: #4b5563; overflow-wrap: anywhere; }
 .rp-sdg-item .rp-sdg-targets { font-size: calc(10.5px * var(--rp-fs)); color: #9ca3af; }
@@ -1664,10 +1688,11 @@ body .leaflet-touch .leaflet-bar a { font-family: inherit; }
 .rp-row-summary .rp-quote { font-size: calc(12px * var(--rp-fs)); line-height: 1.6; }
 .rp-quote-by { margin-top: 6px !important; font-size: calc(11px * var(--rp-fs)); font-weight: 700; color: var(--rp-accent); }
 .rp-map { display: block; width: 100%; height: 150px; border-radius: 10px; }
-.rp-photos { display: grid; gap: 8px; }
-.rp-photo { position: relative; margin: 0; border-radius: 9px; overflow: hidden; background: #f3e7ec; }
-.rp-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.rp-photo figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 8px 4px; font-size: calc(10px * var(--rp-fs)); color: #fff; background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0)); }
+.rp-map-img { height: auto; aspect-ratio: 1000 / 380; object-fit: cover; }
+.rp-gallery { display: flex; flex-direction: column; gap: 8px; }
+.rp-gallery-row { display: flex; justify-content: center; align-items: flex-start; gap: 8px; }
+.rp-photo { flex: 0 0 auto; width: calc(var(--tile-w) * var(--tile-k, 1)); aspect-ratio: 3 / 2; display: grid; margin: 0; border-radius: 9px; overflow: hidden; background: #f3e7ec; }
+.rp-photo img { grid-area: 1 / 1; display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* tables */
 .rp-table { width: 100%; border-collapse: collapse; font-size: calc(11.5px * var(--rp-fs)); line-height: 1.5; }
